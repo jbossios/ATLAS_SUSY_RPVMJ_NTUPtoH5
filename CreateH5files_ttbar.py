@@ -7,11 +7,8 @@
 #                                                                              #
 ################################################################################
 
-# TODO
-# Open all TTrees and make a TChain to process all events together
-
 # Settings
-FileName             = '/eos/user/j/jbossios/SUSY/NTUPs/ttbar_30series/data-trees/DAOD_SUSY4.22323517._000030.pool.root.1.root'
+PATH                 = '/eos/user/j/jbossios/SUSY/NTUPs/ttbar/'
 TreeName             = 'trees_SRRPV_'
 ApplyEventSelections = True
 shuffleJets          = False
@@ -22,7 +19,7 @@ shuffleJets          = False
 
 # Global settings
 dRcut       = 0.5
-maxNjets    = 20
+maxNjets    = 30
 
 # Imports
 from ROOT import *
@@ -52,15 +49,14 @@ class iParton(TLorentzVector):
 # Find out how many events pass the event selections
 ##############################################################################################
 
-# Get TTree
-File = TFile.Open(FileName)
-if not File:
-  print('ERROR: {} not found, exiting'.format(FileName))
-  sys.exit(1)
-tree = File.Get(TreeName)
-if not tree:
-  print('ERROR: {} not found in {}, exiting'.format(TreeName,FileName))
-  sys.exit(1)
+tree = TChain(TreeName)
+for Folder in os.listdir(PATH):
+  for folder in os.listdir(PATH+Folder):
+    if folder != 'data-trees': continue
+    path = PATH+Folder+'/'+folder+'/'
+    for File in os.listdir(path): # Loop over files
+      tree.Add(path+File)
+
 # Loop over events
 nPassingEvents = 0
 for event in tree:
@@ -90,9 +86,11 @@ Structure  = {
 }
 
 # Create H5 file
-HF = h5py.File('data.h5', 'w')
-Groups   = dict()
-Datasets = dict()
+outFileName = 'AllData.h5'
+print('Creating {}...'.format(outFileName))
+HF          = h5py.File(outFileName, 'w')
+Groups      = dict()
+Datasets    = dict()
 for key in Structure:
   Groups[key] = HF.create_group(key)
   for case in Structure[key]['cases']:
@@ -102,9 +100,14 @@ for key in Structure:
 # Loop over events and fill the numpy arrays on each event
 ##############################################################################################
 
+nEntries = tree.GetEntries()
+
 # Loop over events
 counter = -1
-for event in tree:
+#for event in tree:
+for ientry in range(0, nEntries):
+  
+  tree.GetEntry(ientry)
 
   # Find number of particles
   nJets         = len(tree.jet_pt)
@@ -125,7 +128,7 @@ for event in tree:
 
   # Protection
   if nJets > maxNjets:
-    print('ERROR: More than {} jets were found, update script!'.format(maxNjets))
+    print('ERROR: More than {} jets were found ({}), update script!'.format(maxNjets,nJets))
     sys.exit(1)
 
   # Select reco jets
@@ -197,7 +200,7 @@ for event in tree:
       if index != -1:
         if index not in JetIndexes:
           JetIndexes.append(index)
-	else:
+        else:
           print('WARNING: Jet index ({}) was assigned to more than one parton!'.format(index))
 
   # Create arrays with jet info (extend Assigments with jet reco info)
@@ -220,7 +223,7 @@ for event in tree:
        for i in range(nJets,maxNjets):
          if case != 'mask':
            array.append(0.)
-	 else:
+         else:
            array.append(False)
      Assigments['source'][case] = np.array(array)
 
@@ -236,4 +239,7 @@ for event in tree:
     for case in Structure[t]['cases']:
       Datasets[t+'_'+case][counter] = Assigments[t][case]
 
+# Close input file
+del tree
+  
 print('>>> ALL DONE <<<')
