@@ -8,10 +8,11 @@
 ################################################################################
 
 # Settings
-PATH                 = '/eos/user/j/jbossios/SUSY/NTUPs/ttbar/'
-TreeName             = 'trees_SRRPV_'
-ApplyEventSelections = True
-shuffleJets          = False
+PATH                  = '/eos/user/j/jbossios/SUSY/NTUPs/ttbar/'
+TreeName              = 'trees_SRRPV_'
+ApplyEventSelections  = True
+shuffleJets           = False
+SplitDataset4Training = True # use 70% of total selected events for training
 
 ###################################
 # DO NOT MODIFY (below this line)
@@ -27,6 +28,7 @@ from ROOT import RDataFrame
 import h5py,os,sys,argparse
 import numpy as np
 import pandas as pd
+import random
 
 ##################
 # Helpful classes
@@ -57,6 +59,10 @@ for Folder in os.listdir(PATH):
     for File in os.listdir(path): # Loop over files
       tree.Add(path+File)
 
+# Split selected events b/w training and testing (if requested)
+EventNumbers4Training = []
+EventNumbers4Testing  = []
+
 # Loop over events
 nPassingEvents = 0
 for event in tree:
@@ -70,31 +76,64 @@ for event in tree:
     if nJets < 6:    passEventSelection = False
     if nPartons !=6: passEventSelection = False
   if not passEventSelection: continue # skip event
+  if random.random() < 0.7: # use this event for training
+    EventNumbers4Training.append(tree.eventNumber)
+  else: # use this event for testing
+    EventNumbers4Testing.append(tree.eventNumber)
   nPassingEvents += 1
 print('INFO: {} events were selected'.format(nPassingEvents))
 
+nPassingTrainingEvents = len(EventNumbers4Training)
+nPassingTestingEvents  = len(EventNumbers4Testing)
+
 ##############################################################################################
-# Create output H5 file
+# Create output H5 file(s)
 ##############################################################################################
 
 # Structure of output H5 file
 Types      = { 'btag':int, 'mask':bool, 'b':int, 'q1':int, 'q2':int}
 Structure  = {
-  'source' : { 'cases' : ['btag','eta','mask','mass','phi','pt'], 'shape' : (nPassingEvents,maxNjets) },
-  't1'     : { 'cases' : ['b','mask','q1','q2'],                  'shape' : (nPassingEvents,) },
-  't2'     : { 'cases' : ['b','mask','q1','q2'],                  'shape' : (nPassingEvents,) },
+  'all' : {
+    'source' : { 'cases' : ['btag','eta','mask','mass','phi','pt'], 'shape' : (nPassingEvents,maxNjets) },
+    't1'     : { 'cases' : ['b','mask','q1','q2'],                  'shape' : (nPassingEvents,) },
+    't2'     : { 'cases' : ['b','mask','q1','q2'],                  'shape' : (nPassingEvents,) },
+  },
+  'training' : {
+    'source' : { 'cases' : ['btag','eta','mask','mass','phi','pt'], 'shape' : (nPassingTrainingEvents,maxNjets) },
+    't1'     : { 'cases' : ['b','mask','q1','q2'],                  'shape' : (nPassingTrainingEvents,) },
+    't2'     : { 'cases' : ['b','mask','q1','q2'],                  'shape' : (nPassingTrainingEvents,) },
+  },
+  'testing' : {
+    'source' : { 'cases' : ['btag','eta','mask','mass','phi','pt'], 'shape' : (nPassingTestingEvents,maxNjets) },
+    't1'     : { 'cases' : ['b','mask','q1','q2'],                  'shape' : (nPassingTestingEvents,) },
+    't2'     : { 'cases' : ['b','mask','q1','q2'],                  'shape' : (nPassingTestingEvents,) },
+  },
 }
 
-# Create H5 file
-outFileName = 'AllData.h5'
-print('Creating {}...'.format(outFileName))
-HF          = h5py.File(outFileName, 'w')
-Groups      = dict()
-Datasets    = dict()
-for key in Structure:
-  Groups[key] = HF.create_group(key)
-  for case in Structure[key]['cases']:
-    Datasets[key+'_'+case] = Groups[key].create_dataset(case,Structure[key]['shape'],Types[case] if case in Types else float)
+# Create H5 file(s)
+if not SplitDataset4Training:
+  outFileName = 'AllData.h5'
+  print('Creating {}...'.format(outFileName))
+  HF          = h5py.File(outFileName, 'w')
+  Groups      = dict()
+  Datasets    = dict()
+  for key in Structure['all']:
+    Groups[key] = HF.create_group(key)
+    for case in Structure['all'][key]['cases']:
+      Datasets[key+'_'+case] = Groups[key].create_dataset(case,Structure['all'][key]['shape'],Types[case] if case in Types else float)
+else: # split dataset into training and testing datasets
+  Groups      = dict()
+  Datasets    = dict()
+  for datatype in ['training','testing']:
+    outFileName = 'AllData_{}.h5'.format(datatype)
+    print('Creating {}...'.format(outFileName))
+    HF             = h5py.File(outFileName, 'w')
+    Groups[datatype]   = dict()
+    Datasets[datatype] = dict()
+    for key in Structure[datatype]:
+      Groups[datatype][key] = HF.create_group(key)
+      for case in Structure[datatype][key]['cases']:
+        Datasets[datatype][key+'_'+case] = Groups[datatype][key].create_dataset(case,Structure[datatype][key]['shape'],Types[case] if case in Types else float)
   
 ##############################################################################################
 # Loop over events and fill the numpy arrays on each event
@@ -103,7 +142,9 @@ for key in Structure:
 nEntries = tree.GetEntries()
 
 # Loop over events
-counter = -1
+allCounter      = -1
+trainingCounter = -1
+testingCounter  = -1
 #for event in tree:
 for ientry in range(0, nEntries):
   
@@ -122,9 +163,9 @@ for ientry in range(0, nEntries):
     if nPartons !=6: passEventSelection = False
   if not passEventSelection: continue # skip event
 
-  counter += 1
-  if counter+1 % 10000 == 0:
-    print('INFO: {} events processed (of {})'.format(counter+1,nPassingEvents))
+  allCounter += 1
+  if allCounter+1 % 10000 == 0:
+    print('INFO: {} events processed (of {})'.format(allCounter+1,nPassingEvents))
 
   # Protection
   if nJets > maxNjets:
@@ -204,7 +245,7 @@ for ientry in range(0, nEntries):
           print('WARNING: Jet index ({}) was assigned to more than one parton!'.format(index))
 
   # Create arrays with jet info (extend Assigments with jet reco info)
-  for case in Structure['source']:
+  for case in Structure['all']['source']:
      array = []
      for j in SelectedJets:
        if case == 'btag':
@@ -234,10 +275,27 @@ for ientry in range(0, nEntries):
       if Assigments[t][key] == -1: TempMask = False
     Assigments[t]['mask'] = TempMask
 
-  # Add data to the h5 file
-  for key in Structure:
-    for case in Structure[t]['cases']:
-      Datasets[t+'_'+case][counter] = Assigments[t][case]
+  # Split dataset b/w traning and testing (if requested)
+  if SplitDataset4Training:
+    if tree.eventNumber in EventNumbers4Training:
+      trainingCounter += 1
+      # Add data to the h5 training file
+      for key in Structure['training']:
+        for case in Structure['training'][t]['cases']:
+          Datasets['training'][t+'_'+case][trainingCounter] = Assigments[t][case]
+    elif tree.eventNumber in EventNumbers4Testing:
+      testingCounter += 1
+      # Add data to the h5 testing file
+      for key in Structure['testing']:
+        for case in Structure['testing'][t]['cases']:
+          Datasets['testing'][t+'_'+case][testingCounter] = Assigments[t][case]
+    else:
+      print('ERROR: Event is simultaneously not considered for training nor for testing, exiting')
+      sys.exit(1)
+  else: # Add data to a single h5 file
+    for key in Structure:
+      for case in Structure[t]['cases']:
+        Datasets[t+'_'+case][allCounter] = Assigments[t][case]
 
 # Close input file
 del tree
