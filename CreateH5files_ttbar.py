@@ -8,40 +8,68 @@
 ################################################################################
 
 # Settings
-PATH                  = '/eos/user/j/jbossios/SUSY/NTUPs/ttbar/'
-TreeName              = 'trees_SRRPV_'
-ApplyEventSelections  = True
-shuffleJets           = False
-SplitDataset4Training = True # use 70% of total selected events for training
+PATH                   = 'Inputs/'
+TreeName               = 'trees_SRRPV_'
+ApplyEventSelections   = True
+shuffleJets            = False
+SplitDataset4Training  = True # use 90% of total selected events for training
+ProduceTrainingDataset = True
+ProduceTestingDataset  = True
+Debug                  = False
 
 ###################################
 # DO NOT MODIFY (below this line)
 ###################################
 
 # Global settings
-dRcut       = 0.5
-maxNjets    = 30
+dRcut       = 0.4
+maxNjets    = 10
+minJetPt    = 20 # to be safe but there seems to be no jet below 20GeV
 
 # Imports
-from ROOT import *
-from ROOT import RDataFrame
+import ROOT
 import h5py,os,sys,argparse
 import numpy as np
 import pandas as pd
 import random
+random.seed(4) # set the random seed for reproducibility
+import logging
+logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
+log = logging.getLogger('')
+if Debug: log.setLevel("DEBUG")
+
+# Enable multithreading
+nthreads = 4
+ROOT.EnableImplicitMT(nthreads)
+
+###############
+# Protections
+###############
+if not SplitDataset4Training and ProduceTrainingDataset and not ProduceTestingDataset:
+  log.fatal('Asked to produce only training dataset but SplitDataset4Training is disabled, exiting')
+  sys.exit(1)
+if not SplitDataset4Training and ProduceTestingDataset and not ProduceTrainingDataset:
+  log.fatal('Asked to produce only testing dataset but SplitDataset4Training is disabled, exiting')
+  sys.exit(1)
+
+# Choose datasets to be produced (if splitting is requested)
+if SplitDataset4Training:
+  Datasets2Produce = []
+  if ProduceTrainingDataset: Datasets2Produce.append('training')
+  if ProduceTestingDataset:  Datasets2Produce.append('testing')
 
 ##################
 # Helpful classes
 ##################
 
-class iJet(TLorentzVector):
+class iJet(ROOT.TLorentzVector):
   def __init__(self):
-    TLorentzVector.__init__(self)
+    ROOT.TLorentzVector.__init__(self)
     self.bTagged = False
 
-class iParton(TLorentzVector):
+class iParton(ROOT.TLorentzVector):
   def __init__(self):
-    TLorentzVector.__init__(self)
+    ROOT.TLorentzVector.__init__(self)
     self.parentBarcode = -999
     self.parentID      = -999
     self.barcode       = -999
@@ -51,7 +79,7 @@ class iParton(TLorentzVector):
 # Find out how many events pass the event selections
 ##############################################################################################
 
-tree = TChain(TreeName)
+tree = ROOT.TChain(TreeName)
 for Folder in os.listdir(PATH):
   for folder in os.listdir(PATH+Folder):
     if folder != 'data-trees': continue
@@ -66,7 +94,10 @@ EventNumbers4Testing  = []
 # Loop over events
 nPassingEvents = 0
 for event in tree:
-  nJets         = len(tree.jet_pt)
+  AllPassJets   = [iJet().SetPtEtaPhiE(tree.jet_pt[i],tree.jet_eta[i],tree.jet_phi[i],tree.jet_e[i]) for i in range(len(tree.jet_pt)) if tree.jet_passOR[i] and tree.jet_pt[i] > minJetPt]
+  SelectedJets  = [AllPassJets[i] for i in range(min(maxNjets,len(AllPassJets)))] # Select leading n jets with n == min(maxNjets,njets)
+  #nJets         = len(tree.jet_pt)
+  nJets         = len(SelectedJets)
   nQuarksFromWs = len(tree.truth_QuarkFromW_pt)
   nbsFromTops   = len(tree.truth_bFromTop_pt)
   nPartons      = nQuarksFromWs + nbsFromTops
@@ -81,17 +112,26 @@ for event in tree:
   else: # use this event for testing
     EventNumbers4Testing.append(tree.eventNumber)
   nPassingEvents += 1
-print('INFO: {} events were selected'.format(nPassingEvents))
+log.info('{} events were selected'.format(nPassingEvents))
 
 nPassingTrainingEvents = len(EventNumbers4Training)
 nPassingTestingEvents  = len(EventNumbers4Testing)
+
+if SplitDataset4Training:
+  log.info('{} events were selected for training'.format(nPassingTrainingEvents))
+  log.info('{} events were selected for testing'.format(nPassingTestingEvents))
+
+# Protection
+if nPassingTrainingEvents + nPassingTestingEvents != nPassingEvents:
+  log.fatal('Number of training and selected events do not match total number of passing events, exiting')
+  sys.exit(1)
 
 ##############################################################################################
 # Create output H5 file(s)
 ##############################################################################################
 
 # Structure of output H5 file
-Types      = { 'btag':int, 'mask':bool, 'b':int, 'q1':int, 'q2':int}
+Types      = { 'mask':bool, 'b':int, 'q1':int, 'q2':int }
 Structure  = {
   'all' : {
     'source' : { 'cases' : ['btag','eta','mask','mass','phi','pt'], 'shape' : (nPassingEvents,maxNjets) },
@@ -113,7 +153,7 @@ Structure  = {
 # Create H5 file(s)
 if not SplitDataset4Training:
   outFileName = 'AllData.h5'
-  print('Creating {}...'.format(outFileName))
+  log.info('Creating {}...'.format(outFileName))
   HF          = h5py.File(outFileName, 'w')
   Groups      = dict()
   Datasets    = dict()
@@ -124,10 +164,10 @@ if not SplitDataset4Training:
 else: # split dataset into training and testing datasets
   Groups      = dict()
   Datasets    = dict()
-  for datatype in ['training','testing']:
+  for datatype in Datasets2Produce:
     outFileName = 'AllData_{}.h5'.format(datatype)
-    print('Creating {}...'.format(outFileName))
-    HF             = h5py.File(outFileName, 'w')
+    log.info('Creating {}...'.format(outFileName))
+    HF                 = h5py.File(outFileName, 'w')
     Groups[datatype]   = dict()
     Datasets[datatype] = dict()
     for key in Structure[datatype]:
@@ -139,19 +179,27 @@ else: # split dataset into training and testing datasets
 # Loop over events and fill the numpy arrays on each event
 ##############################################################################################
 
-nEntries = tree.GetEntries()
+#nEntries = tree.GetEntries()
 
 # Loop over events
 allCounter      = -1
 trainingCounter = -1
 testingCounter  = -1
-#for event in tree:
-for ientry in range(0, nEntries):
-  
-  tree.GetEntry(ientry)
+log.info('About to enter event loop')
+ROOT.EnableImplicitMT(nthreads)
+for event in tree:
 
-  # Find number of particles
-  nJets         = len(tree.jet_pt)
+  # Find number of particles/jets
+  # Select reco jets
+  AllPassJets = []
+  for ijet in range(len(tree.jet_pt)):
+    if tree.jet_passOR[ijet] and tree.jet_pt[ijet] > minJetPt:
+      jet = iJet()
+      jet.SetPtEtaPhiE(tree.jet_pt[ijet],tree.jet_eta[ijet],tree.jet_phi[ijet],tree.jet_e[ijet])
+      jet.bTagged = int(ord(tree.jet_bTag[ijet])) # convert chart to int
+      AllPassJets.append(jet)
+  SelectedJets  = [AllPassJets[i] for i in range(min(maxNjets,len(AllPassJets)))] # Select leading n jets with n == min(maxNjets,njets)
+  nJets         = len(SelectedJets)
   nQuarksFromWs = len(tree.truth_QuarkFromW_pt)
   nbsFromTops   = len(tree.truth_bFromTop_pt)
   nPartons      = nQuarksFromWs + nbsFromTops
@@ -164,24 +212,24 @@ for ientry in range(0, nEntries):
   if not passEventSelection: continue # skip event
 
   allCounter += 1
-  if allCounter+1 % 10000 == 0:
-    print('INFO: {} events processed (of {})'.format(allCounter+1,nPassingEvents))
+  if (allCounter+1) % 10000 == 0:
+    log.info('{} events processed (of {})'.format(allCounter+1,nPassingEvents))
+
+  # Was this event assigned for training or testing?
+  if SplitDataset4Training:
+    ForTraining = True # if False then event to be used for testing
+    if tree.eventNumber in EventNumbers4Testing: ForTraining = False
+    if not ProduceTrainingDataset and ForTraining: continue    # skip event meant for training since asked not to produce training dataset
+    if not ProduceTestingDataset and not ForTraining: continue # skip event meant for testing since asked not to produce testing dataset
 
   # Protection
   if nJets > maxNjets:
-    print('ERROR: More than {} jets were found ({}), update script!'.format(maxNjets,nJets))
+    log.fatal('More than {} jets were found ({}), update script!'.format(maxNjets,nJets))
     sys.exit(1)
-
-  # Select reco jets
-  SelectedJets = [iJet() for i in range(nJets)]
-  for ijet in range(nJets):
-    SelectedJets[ijet].SetPtEtaPhiE(tree.jet_pt[ijet],tree.jet_eta[ijet],tree.jet_phi[ijet],tree.jet_e[ijet])
-    SelectedJets[ijet].bTagged = int(ord(tree.jet_bTag[ijet])) # convert chart to int
-
+ 
   # Remove pt ordering in the jet array (if requested)
   if shuffleJets:
-    seed = 4 # Set the random seed for reproducibility
-    random.Random(seed).shuffle(SelectedJets)
+    random.shuffle(SelectedJets)
 
   # Select quarks from Ws
   QuarksFromWs = [iParton() for i in range(nQuarksFromWs)]
@@ -227,9 +275,10 @@ for ientry in range(0, nEntries):
       if partonParentID == 24 or partonParentID == -24: # quark from W
         Assigments['t1' if partonParentID == 24 else 't2']['q1' if Partons[matchPartonIndex].pdgID > 0 else 'q2'] = jetIndex
       elif partonParentID == 6 or partonParentID == -6: # b quark from top quark
-        Assigments['t1' if partonParentID == 6 else 't2']['b'] = jetIndex
+        if jet.bTagged: # consider b-quark matched to reco jet only if reco jet is b-tagged
+          Assigments['t1' if partonParentID == 6 else 't2']['b'] = jetIndex
       else:
-        print('ERROR: partonParentID ({}) not recornized, exiting'.format(partonParentID))
+        log.FATAL('partonParentID ({}) not recornized, exiting'.format(partonParentID))
         sys.exit(1)
 
   # Protection: make sure the same jet was not matched to two partons
@@ -242,10 +291,10 @@ for ientry in range(0, nEntries):
         if index not in JetIndexes:
           JetIndexes.append(index)
         else:
-          print('WARNING: Jet index ({}) was assigned to more than one parton!'.format(index))
+          log.warning('Jet index ({}) was assigned to more than one parton!'.format(index))
 
   # Create arrays with jet info (extend Assigments with jet reco info)
-  for case in Structure['all']['source']:
+  for case in Structure['all']['source']['cases']:
      array = []
      for j in SelectedJets:
        if case == 'btag':
@@ -281,23 +330,24 @@ for ientry in range(0, nEntries):
       trainingCounter += 1
       # Add data to the h5 training file
       for key in Structure['training']:
-        for case in Structure['training'][t]['cases']:
-          Datasets['training'][t+'_'+case][trainingCounter] = Assigments[t][case]
+        for case in Structure['training'][key]['cases']:
+          Datasets['training'][key+'_'+case][trainingCounter] = Assigments[key][case]
     elif tree.eventNumber in EventNumbers4Testing:
       testingCounter += 1
       # Add data to the h5 testing file
       for key in Structure['testing']:
-        for case in Structure['testing'][t]['cases']:
-          Datasets['testing'][t+'_'+case][testingCounter] = Assigments[t][case]
+        for case in Structure['testing'][key]['cases']:
+          Datasets['testing'][key+'_'+case][testingCounter] = Assigments[key][case]
     else:
-      print('ERROR: Event is simultaneously not considered for training nor for testing, exiting')
+      log.error('Event is simultaneously not considered for training nor for testing, exiting')
       sys.exit(1)
   else: # Add data to a single h5 file
     for key in Structure:
-      for case in Structure[t]['cases']:
-        Datasets[t+'_'+case][allCounter] = Assigments[t][case]
+      for case in Structure[key]['cases']:
+        Datasets[key+'_'+case][allCounter] = Assigments[key][case]
 
 # Close input file
 del tree
+HF.close()
   
-print('>>> ALL DONE <<<')
+log.info('>>> ALL DONE <<<')

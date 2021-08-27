@@ -1,0 +1,10 @@
+Scripts:
+
+1. CreateH5files_ttbar.py
+
+Use this script to create HDF5 files from ROOT files for ATLAS MC ttbar samples
+
+2. CreateH5files_Signal_DirectDecayMode.py
+
+Use this script to create HDF5 files from ROOT files for signal samples
+
