@@ -1,9 +1,10 @@
 ################################################################################
 #                                                                              #
 # Purpose: ROOT file -> H5 converted for signal direct decay mode samples      #
+#          Every mass point will have roughly the same stats                   #
 #                                                                              #
 # Authour: Jona Bossio (jbossios@cern.ch)                                      #
-# Date:    22 July 2021                                                        #
+# Date:    September 2021                                                      #
 #                                                                              #
 ################################################################################
 
@@ -12,25 +13,13 @@ PATH                   = 'SignalInputs/MC16a/'
 TreeName               = 'trees_SRRPV_'
 ApplyEventSelections   = True
 shuffleJets            = False
-SplitDataset4Training  = True # use 90% of total selected events for training
-ProduceTrainingDataset = True
-ProduceTestingDataset  = True
 Debug                  = False
 MinNjets               = 6
 FlavourType            = 'All' # options: All (ALL+UDB+UDS), UDB, UDS
-MassPoints             = 'All' # Options: All, Low, Intermediate, IntermediateWo1400, High, 1400
 
 ################################################################################
 # DO NOT MODIFY (below this line)
 ################################################################################
-
-###############################
-# Conventions
-###############################
-# q1 is the first matched quark found for the corresponding gluion
-# q2 is the second matched quark found for the corresponding gluion
-# q3 is the third matched quark found for the corresponding gluion
-# g1 is the first parent gluino for first matched quark
 
 # Global settings
 dRcut       = 0.4
@@ -43,11 +32,40 @@ Config.write('ApplyEventSelections = {}\n'.format(ApplyEventSelections))
 Config.write('ShuffleJets          = {}\n'.format(shuffleJets))
 Config.write('MinNjets             = {}\n'.format(MinNjets))
 Config.write('FlavourType          = {}\n'.format(FlavourType))
-Config.write('MassPoints           = {}\n'.format(MassPoints))
 Config.write('dRcut                = {}\n'.format(dRcut))
 Config.write('maxNjets             = {}\n'.format(maxNjets))
 Config.write('minJetPt             = {}\n'.format(minJetPt))
 Config.close()
+
+# Dictorionary with number of events for each mass point
+Nevents = {
+  '900'  : 16867,
+  '1000' : 17405,
+  '1100' : 17772,
+  '1200' : 17929,
+  '1300' : 18225,
+  '1400' : 110047,
+  '1500' : 18523,
+  '1600' : 18546,
+  '1700' : 18633,
+  '1800' : 28210,
+  '1900' : 18745,
+  '2000' : 18788,
+  '2100' : 18886,
+  '2200' : 28466,
+  '2300' : 18926,
+  '2400' : 17981,
+  '2500' : 18986,
+}
+maxNevents4Training = Nevents[min(Nevents, key=Nevents.get)]
+
+###############################
+# Conventions
+###############################
+# q1 is the first matched quark found for the corresponding gluion
+# q2 is the second matched quark found for the corresponding gluion
+# q3 is the third matched quark found for the corresponding gluion
+# g1 is the first parent gluino for first matched quark
 
 # Imports
 import ROOT
@@ -65,21 +83,8 @@ if Debug: log.setLevel("DEBUG")
 nthreads = 4
 ROOT.EnableImplicitMT(nthreads)
 
-###############
-# Protections
-###############
-if not SplitDataset4Training and ProduceTrainingDataset and not ProduceTestingDataset:
-  log.fatal('Asked to produce only training dataset but SplitDataset4Training is disabled, exiting')
-  sys.exit(1)
-if not SplitDataset4Training and ProduceTestingDataset and not ProduceTrainingDataset:
-  log.fatal('Asked to produce only testing dataset but SplitDataset4Training is disabled, exiting')
-  sys.exit(1)
-
 # Choose datasets to be produced (if splitting is requested)
-if SplitDataset4Training:
-  Datasets2Produce = []
-  if ProduceTrainingDataset: Datasets2Produce.append('training')
-  if ProduceTestingDataset:  Datasets2Produce.append('testing')
+Datasets2Produce = ['training','testing']
 
 ##################
 # Helpful classes
@@ -101,104 +106,43 @@ class iParton(ROOT.TLorentzVector):
 ##############################################################################################
 
 allDSIDs = {
-  'All' : {
-    "504513" : "GG_rpv_UDB_900",
-    "504514" : "GG_rpv_UDB_1000",
-    "504515" : "GG_rpv_UDB_1100",
-    "504516" : "GG_rpv_UDB_1200",
-    "504517" : "GG_rpv_UDB_1300",
-    "504518" : "GG_rpv_UDB_1400",
-    "504519" : "GG_rpv_UDB_1500",
-    "504520" : "GG_rpv_UDB_1600",
-    "504521" : "GG_rpv_UDB_1700",
-    "504522" : "GG_rpv_UDB_1800",
-    "504523" : "GG_rpv_UDB_1900",
-    "504524" : "GG_rpv_UDB_2000",
-    "504525" : "GG_rpv_UDB_2100",
-    "504526" : "GG_rpv_UDB_2200",
-    "504527" : "GG_rpv_UDB_2300",
-    "504528" : "GG_rpv_UDB_2400",
-    "504529" : "GG_rpv_UDB_2500",
-    "504534" : "GG_rpv_UDS_900",
-    "504535" : "GG_rpv_UDS_1000",
-    "504536" : "GG_rpv_UDS_1100",
-    "504537" : "GG_rpv_UDS_1200",
-    "504538" : "GG_rpv_UDS_1300",
-    "504539" : "GG_rpv_UDS_1400",
-    "504540" : "GG_rpv_UDS_1500",
-    "504541" : "GG_rpv_UDS_1600",
-    "504542" : "GG_rpv_UDS_1700",
-    "504543" : "GG_rpv_UDS_1800",
-    "504544" : "GG_rpv_UDS_1900",
-    "504545" : "GG_rpv_UDS_2000",
-    "504546" : "GG_rpv_UDS_2100",
-    "504547" : "GG_rpv_UDS_2200",
-    "504548" : "GG_rpv_UDS_2300",
-    "504549" : "GG_rpv_UDS_2400",
-    "504550" : "GG_rpv_UDS_2500",
-    "504551" : "GG_rpv_ALL_1800",
-    "504552" : "GG_rpv_ALL_2200",
-  },
-  'Low' : {
-    "504513" : "GG_rpv_UDB_900",
-    "504514" : "GG_rpv_UDB_1000",
-    "504515" : "GG_rpv_UDB_1100",
-    "504516" : "GG_rpv_UDB_1200",
-    "504517" : "GG_rpv_UDB_1300",
-    "504534" : "GG_rpv_UDS_900",
-    "504535" : "GG_rpv_UDS_1000",
-    "504536" : "GG_rpv_UDS_1100",
-    "504537" : "GG_rpv_UDS_1200",
-    "504538" : "GG_rpv_UDS_1300",
-  },
-  'Intermediate' : {
-    "504518" : "GG_rpv_UDB_1400",
-    "504519" : "GG_rpv_UDB_1500",
-    "504520" : "GG_rpv_UDB_1600",
-    "504521" : "GG_rpv_UDB_1700",
-    "504522" : "GG_rpv_UDB_1800",
-    "504523" : "GG_rpv_UDB_1900",
-    "504539" : "GG_rpv_UDS_1400",
-    "504540" : "GG_rpv_UDS_1500",
-    "504541" : "GG_rpv_UDS_1600",
-    "504542" : "GG_rpv_UDS_1700",
-    "504543" : "GG_rpv_UDS_1800",
-    "504544" : "GG_rpv_UDS_1900",
-    "504551" : "GG_rpv_ALL_1800",
-  },
-  'IntermediateWo1400' : {
-    "504519" : "GG_rpv_UDB_1500",
-    "504520" : "GG_rpv_UDB_1600",
-    "504521" : "GG_rpv_UDB_1700",
-    "504522" : "GG_rpv_UDB_1800",
-    "504523" : "GG_rpv_UDB_1900",
-    "504540" : "GG_rpv_UDS_1500",
-    "504541" : "GG_rpv_UDS_1600",
-    "504542" : "GG_rpv_UDS_1700",
-    "504543" : "GG_rpv_UDS_1800",
-    "504544" : "GG_rpv_UDS_1900",
-    "504551" : "GG_rpv_ALL_1800",
-  },
-  'High' : {
-    "504524" : "GG_rpv_UDB_2000",
-    "504525" : "GG_rpv_UDB_2100",
-    "504526" : "GG_rpv_UDB_2200",
-    "504527" : "GG_rpv_UDB_2300",
-    "504528" : "GG_rpv_UDB_2400",
-    "504529" : "GG_rpv_UDB_2500",
-    "504545" : "GG_rpv_UDS_2000",
-    "504546" : "GG_rpv_UDS_2100",
-    "504547" : "GG_rpv_UDS_2200",
-    "504548" : "GG_rpv_UDS_2300",
-    "504549" : "GG_rpv_UDS_2400",
-    "504550" : "GG_rpv_UDS_2500",
-    "504552" : "GG_rpv_ALL_2200",
-  },
-  '1400' : {
-    "504518" : "GG_rpv_UDB_1400",
-    "504539" : "GG_rpv_UDS_1400",
-  },
-}[MassPoints]
+  "504513" : "GG_rpv_UDB_900",
+  "504514" : "GG_rpv_UDB_1000",
+  "504515" : "GG_rpv_UDB_1100",
+  "504516" : "GG_rpv_UDB_1200",
+  "504517" : "GG_rpv_UDB_1300",
+  "504518" : "GG_rpv_UDB_1400",
+  "504519" : "GG_rpv_UDB_1500",
+  "504520" : "GG_rpv_UDB_1600",
+  "504521" : "GG_rpv_UDB_1700",
+  "504522" : "GG_rpv_UDB_1800",
+  "504523" : "GG_rpv_UDB_1900",
+  "504524" : "GG_rpv_UDB_2000",
+  "504525" : "GG_rpv_UDB_2100",
+  "504526" : "GG_rpv_UDB_2200",
+  "504527" : "GG_rpv_UDB_2300",
+  "504528" : "GG_rpv_UDB_2400",
+  "504529" : "GG_rpv_UDB_2500",
+  "504534" : "GG_rpv_UDS_900",
+  "504535" : "GG_rpv_UDS_1000",
+  "504536" : "GG_rpv_UDS_1100",
+  "504537" : "GG_rpv_UDS_1200",
+  "504538" : "GG_rpv_UDS_1300",
+  "504539" : "GG_rpv_UDS_1400",
+  "504540" : "GG_rpv_UDS_1500",
+  "504541" : "GG_rpv_UDS_1600",
+  "504542" : "GG_rpv_UDS_1700",
+  "504543" : "GG_rpv_UDS_1800",
+  "504544" : "GG_rpv_UDS_1900",
+  "504545" : "GG_rpv_UDS_2000",
+  "504546" : "GG_rpv_UDS_2100",
+  "504547" : "GG_rpv_UDS_2200",
+  "504548" : "GG_rpv_UDS_2300",
+  "504549" : "GG_rpv_UDS_2400",
+  "504550" : "GG_rpv_UDS_2500",
+  "504551" : "GG_rpv_ALL_1800",
+  "504552" : "GG_rpv_ALL_2200",
+}
 
 Flavours = [FlavourType] if FlavourType == 'UDB' or FlavourType == 'UDS' else ['ALL','UDS','UDB']
 DSIDs = dict()
@@ -227,13 +171,15 @@ for event in tree:
   SelectedJets  = [AllPassJets[i] for i in range(min(maxNjets,len(AllPassJets)))] # Select leading n jets with n == min(maxNjets,njets)
   nJets         = len(SelectedJets)
   nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt)
+  gmass         = tree.truth_parent_m[0]
   # Apply event selections
   passEventSelection = True
   if ApplyEventSelections:
     if nJets < MinNjets:  passEventSelection = False
     if nQuarksFromGs !=6: passEventSelection = False
   if not passEventSelection: continue # skip event
-  if random.random() < 0.9: # use this event for training
+  prob = maxNevents4Training/Nevents[str(int(gmass))]
+  if random.random() < prob: # use this event for training
     EventNumbers4Training.append(counter)
   else: # use this event for testing
     EventNumbers4Testing.append(counter)
@@ -243,9 +189,8 @@ log.info('{} events were selected'.format(nPassingEvents))
 nPassingTrainingEvents = len(EventNumbers4Training)
 nPassingTestingEvents  = len(EventNumbers4Testing)
 
-if SplitDataset4Training:
-  log.info('{} events were selected for training'.format(nPassingTrainingEvents))
-  log.info('{} events were selected for testing'.format(nPassingTestingEvents))
+log.info('{} events were selected for training'.format(nPassingTrainingEvents))
+log.info('{} events were selected for testing'.format(nPassingTestingEvents))
 
 # Protection
 if (nPassingTrainingEvents + nPassingTestingEvents) != nPassingEvents:
@@ -310,35 +255,22 @@ def getQuarkFlavour(pdgid,g,dictionary):
   return dictionary,qFlavour
 
 # Create H5 file(s)
-if not SplitDataset4Training:
-  outFileName = '{}SignalData_{}.h5'.format(FlavourType,MassPoints)
+# split dataset into training and testing datasets
+Groups      = dict()
+Datasets    = dict()
+for datatype in Datasets2Produce:
+  outFileName = '{}SignalData_{}.h5'.format(FlavourType,datatype)
   log.info('Creating {}...'.format(outFileName))
-  HF          = h5py.File(outFileName, 'w')
-  Groups      = dict()
-  Datasets    = dict()
-  for key in Structure['all']:
-    Groups[key] = HF.create_group(key)
-    for case in Structure['all'][key]['cases']:
+  HF                 = h5py.File(outFileName, 'w')
+  Groups[datatype]   = dict()
+  Datasets[datatype] = dict()
+  for key in Structure[datatype]:
+    Groups[datatype][key] = HF.create_group(key)
+    for case in Structure[datatype][key]['cases']:
       if key == 'source':
-        Datasets[key+'_'+case] = Groups[key].create_dataset(case,Structure['all'][key]['cases'][case],Types[case] if case in Types else float)
+        Datasets[datatype][key+'_'+case] = Groups[datatype][key].create_dataset(case,Structure[datatype][key]['cases'][case],Types[case] if case in Types else float)
       else:
-        Datasets[key+'_'+case] = Groups[key].create_dataset(case,Structure['all'][key]['shape'],Types[case] if case in Types else float)
-else: # split dataset into training and testing datasets
-  Groups      = dict()
-  Datasets    = dict()
-  for datatype in Datasets2Produce:
-    outFileName = '{}SignalData_{}_{}.h5'.format(FlavourType,MassPoints,datatype)
-    log.info('Creating {}...'.format(outFileName))
-    HF                 = h5py.File(outFileName, 'w')
-    Groups[datatype]   = dict()
-    Datasets[datatype] = dict()
-    for key in Structure[datatype]:
-      Groups[datatype][key] = HF.create_group(key)
-      for case in Structure[datatype][key]['cases']:
-        if key == 'source':
-          Datasets[datatype][key+'_'+case] = Groups[datatype][key].create_dataset(case,Structure[datatype][key]['cases'][case],Types[case] if case in Types else float)
-        else:
-          Datasets[datatype][key+'_'+case] = Groups[datatype][key].create_dataset(case,Structure[datatype][key]['shape'],Types[case] if case in Types else float)
+        Datasets[datatype][key+'_'+case] = Groups[datatype][key].create_dataset(case,Structure[datatype][key]['shape'],Types[case] if case in Types else float)
   
 ##############################################################################################
 # Loop over events and fill the numpy arrays on each event
@@ -377,11 +309,8 @@ for event in tree:
     log.info('{} events processed (of {})'.format(allCounter+1,nPassingEvents))
 
   # Was this event assigned for training or testing?
-  if SplitDataset4Training:
-    ForTraining = True # if False then event will be used for testing
-    if counter in EventNumbers4Testing: ForTraining = False
-    if not ProduceTrainingDataset and ForTraining: continue    # skip event meant for training since asked not to produce training dataset
-    if not ProduceTestingDataset and not ForTraining: continue # skip event meant for testing since asked not to produce testing dataset
+  ForTraining = True # if False then event will be used for testing
+  if counter in EventNumbers4Testing: ForTraining = False
 
   # Protection
   if nJets > maxNjets:
@@ -500,28 +429,21 @@ for event in tree:
     Assigments[g]['mask'] = TempMask
 
   # Split dataset b/w traning and testing (if requested)
-  if SplitDataset4Training:
-    if counter in EventNumbers4Training:
-      if ProduceTrainingDataset:
-        trainingCounter += 1
-        # Add data to the h5 training file
-        for key in Structure['training']:
-          for case in Structure['training'][key]['cases']:
-            Datasets['training'][key+'_'+case][trainingCounter] = Assigments[key][case]
-    elif counter in EventNumbers4Testing:
-      if ProduceTestingDataset:
-        testingCounter += 1
-        # Add data to the h5 testing file
-        for key in Structure['testing']:
-          for case in Structure['testing'][key]['cases']:
-            Datasets['testing'][key+'_'+case][testingCounter] = Assigments[key][case]
-    else:
-      log.error('Event is simultaneously not considered for training nor for testing, exiting')
-      sys.exit(1)
-  else: # Add data to a single h5 file
-    for key in Structure:
-      for case in Structure[key]['cases']:
-        Datasets[key+'_'+case][allCounter] = Assigments[key][case]
+  if counter in EventNumbers4Training:
+    trainingCounter += 1
+    # Add data to the h5 training file
+    for key in Structure['training']:
+      for case in Structure['training'][key]['cases']:
+        Datasets['training'][key+'_'+case][trainingCounter] = Assigments[key][case]
+  elif counter in EventNumbers4Testing:
+    testingCounter += 1
+    # Add data to the h5 testing file
+    for key in Structure['testing']:
+      for case in Structure['testing'][key]['cases']:
+        Datasets['testing'][key+'_'+case][testingCounter] = Assigments[key][case]
+  else:
+    log.error('Event is simultaneously not considered for training nor for testing, exiting')
+    sys.exit(1)
 
 # Close input file
 del tree
