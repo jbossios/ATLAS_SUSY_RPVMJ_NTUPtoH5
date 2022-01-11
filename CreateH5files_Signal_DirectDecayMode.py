@@ -22,11 +22,11 @@ ProduceTestingDataset  = True
 Debug                  = False
 MinNjets               = 6
 FlavourType            = 'UDB+UDS' # options: All (ALL+UDB+UDS), UDB, UDS, UDB+UDS
-MassPoints             = '1400' # Options: All, Low, Intermediate, IntermediateWo1400, High, 1400
+MassPoints             = 'All' # Options: All, Low, Intermediate, IntermediateWo1400, High, 1400
 UseAllFiles            = False  # Use only when running on Lea's files, meant to overrule FlavourType and MassPoints options
 CheckMatching          = False  # Compare my matching with Lea's decision
-MatchingCriteria       = 'Default' # Options: JetsFirst, QuarksFirst, JetsFirst_rmMQs and Default (use matching decision from TTrees) [USE Default]
-ForceHalf              = True  # Force to use only half of input events (only works for 1400 samples, MassPoints==1400)
+MatchingCriteria       = 'Default' # Options: JetsFirst, JetsFirst_rmMQs and Default (use matching decision from TTrees) and Default_woFSR [USE Default]
+ForceHalf              = False  # Force to use only half of input events (only works for 1400 samples, MassPoints==1400)
 
 ################################################################################
 # DO NOT MODIFY (below this line)
@@ -333,8 +333,8 @@ Structure  = {
 # Helpful functions
 ########################################################
 
-# Function that assigns quarks to q1, q2 or q3
-def getQuarkFlavour(pdgid,g,dictionary):
+def get_quark_flavour(pdgid, g, dictionary):
+  """ Function that assigns quarks to q1, q2 or q3 """
   if dictionary[g]['q1'] == 0:
     dictionary[g]['q1'] = pdgid
     qFlavour = 'q1'
@@ -343,35 +343,65 @@ def getQuarkFlavour(pdgid,g,dictionary):
     qFlavour = 'q2'
   else:
     qFlavour = 'q3'
-  return dictionary,qFlavour
+  return dictionary, qFlavour
 
-# Get pdgid of quark from gluino matched to a jet
-def getPartonInfo(Partons,barcode):
+def get_parton_info(Partons, barcode):
+  """ Get info of quark from gluino matched to a jet """
   # Loop over quarks from gluinos
-  partonIndex = -1
-  for parton in Partons:
-    partonIndex += 1
+  for partonIndex, parton in enumerate(Partons):
     if Partons[partonIndex].barcode == barcode:
       return partonIndex, Partons[partonIndex].pdgID, Partons[partonIndex].parentBarcode
   return -1,-1,-1
 
-# Get pdgid of FSR quark matched to a jet
-def getFSRInfo(FSRs,barcode):
-  # Loop over FSRs
-  FSRindex = -1
-  for FSR in FSRs:
-    FSRindex += 1
-    if FSRs[FSRindex].barcode == barcode:
-      return FSRindex, FSRs[FSRindex].pdgID, FSRs[FSRindex].parentBarcode
+def get_fsr_info(FSRs, barcode):
+  """ Get info of FSR quark matched to a jet """
+  for fsr_index, FSR in enumerate(FSRs): # loop over FSRs
+    if FSRs[fsr_index].barcode == barcode:
+      return fsr_index, FSRs[fsr_index].pdgID, FSRs[fsr_index].parentBarcode, FSRs[fsr_index].originalBarcode
   return -1,-1,-1
 
+def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dict, selected_jets, jet_index):
+  """ Find to which gluino (g1 or g2) a jet was matched and determines if the parton is q1, q2 or q3 (see convention above) """
+  if g_barcodes['g1'] == 0: # not assigned yet to any quark parent barcode
+    g_barcodes['g1'] = q_parent_barcode
+    q_pdgid_dict, q_flavour = get_quark_flavour(pdgid, 'g1', q_pdgid_dict)
+    if assigments['g1'][q_flavour] == -1: # not assigned yet
+      assigments['g1'][q_flavour] = jet_index
+      assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
+    else: # if assigned already, pick up jet with largets pT
+      if selected_jets[jet_index].Pt() > selected_jets[assigments['g1'][q_flavour]].Pt():
+        assigments['g1'][q_flavour] = jet_index
+        assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
+  else: # g1 was defined alredy (check if quark parent barcode agrees with it)
+    if g_barcodes['g1'] == q_parent_barcode:
+      q_pdgid_dict, q_flavour = get_quark_flavour(pdgid, 'g1', q_pdgid_dict)
+      if assigments['g1'][q_flavour] == -1: # not assigned yet
+        assigments['g1'][q_flavour] = jet_index
+        assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
+      else: # if assigned already, pick up jet with largets pT
+        if selected_jets[jet_index].Pt() > selected_jets[assigments['g1'][q_flavour]].Pt():
+          assigments['g1'][q_flavour] = jet_index
+          assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
+    else:
+      q_pdgid_dict, q_flavour = get_quark_flavour(pdgid, 'g2', q_pdgid_dict)
+      if assigments['g2'][q_flavour] == -1: # not assigned yet
+        assigments['g2'][q_flavour] = jet_index
+        assigments['g2'][q_flavour.replace('q', 'f')] = pdgid
+      else: # if assigned already, pick up jet with largets pT
+        if selected_jets[jet_index].Pt() > selected_jets[assigments['g2'][q_flavour]].Pt():
+          assigments['g2'][q_flavour] = jet_index
+          assigments['g2'][q_flavour.replace('q', 'f')] = pdgid
+  return assigments
+
+########################################################
 # Create H5 file(s)
+########################################################
+
 if not SplitDataset4Training:
   outFileName = '{}SignalData_{}.h5'.format(FlavourType,MassPoints)
   log.info('Creating {}...'.format(outFileName))
-  HF          = h5py.File(outFileName, 'w')
-  Groups      = dict()
-  Datasets    = dict()
+  HF = h5py.File(outFileName, 'w')
+  Groups, Datasets = dict(), dict()
   for key in Structure['all']:
     Groups[key] = HF.create_group(key)
     for case in Structure['all'][key]['cases']:
@@ -385,9 +415,8 @@ else: # split dataset into training and testing datasets
   for datatype in Datasets2Produce:
     outFileName = '{}SignalData_{}_{}.h5'.format(FlavourType,MassPoints,datatype)
     log.info('Creating {}...'.format(outFileName))
-    HF                 = h5py.File(outFileName, 'w')
-    Groups[datatype]   = dict()
-    Datasets[datatype] = dict()
+    HF = h5py.File(outFileName, 'w')
+    Groups[datatype], Datasets[datatype] = dict(), dict()
     for key in Structure[datatype]:
       Groups[datatype][key] = HF.create_group(key)
       for case in Structure[datatype][key]['cases']:
@@ -401,14 +430,13 @@ else: # split dataset into training and testing datasets
 ##############################################################################################
 
 # Reconstructed mass by truth mass
-Masses      = [900+i*100 for i in range(0,17)]
-hRecoMasses = {mass : ROOT.TH1D('RecoMass_TruthMass{}'.format(mass),'',300,0,3000) for mass in Masses}
+Masses      = [900 + i*100 for i in range(0, 17)]
+hRecoMasses = {mass : ROOT.TH1D('RecoMass_TruthMass{}'.format(mass), '', 300, 0, 3000) for mass in Masses}
 
 # Histogram for reconstructed gluino mass - true gluino mass
-hGluinoMassDiff = ROOT.TH1D('GluinoMassDiff','',10000,-10000,10000)
+hGluinoMassDiff = ROOT.TH1D('GluinoMassDiff', '', 10000, -10000, 10000)
 
 # Loop over events
-counter         = -1
 allCounter      = -1
 trainingCounter = -1
 testingCounter  = -1
@@ -418,16 +446,14 @@ totalEvents                 = tree.GetEntries()
 matchedEvents               = 0
 multipleQuarkMatchingEvents = 0
 matchedEventNumbers         = []
-for event in tree:
-  counter += 1
-  # Find number of particles/jets
+for counter, event in enumerate(tree):
   # Select reco jets
   AllPassJets = []
   for ijet in range(len(tree.jet_pt)):
     if tree.jet_passOR[ijet] and tree.jet_isSig[ijet] and tree.jet_pt[ijet] > minJetPt:
       jet = iJet()
       jet.SetPtEtaPhiE(tree.jet_pt[ijet],tree.jet_eta[ijet],tree.jet_phi[ijet],tree.jet_e[ijet])
-      if CheckMatching or MatchingCriteria == 'Default': jet.BarcodeLeaMatch = tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]
+      if CheckMatching or 'Default' in MatchingCriteria: jet.BarcodeLeaMatch = tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]
       if MatchingCriteria == 'Default': jet.BarcodeLeaFSRMatch = tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]
       AllPassJets.append(jet)
   SelectedJets  = [AllPassJets[i] for i in range(min(maxNjets,len(AllPassJets)))] # Select leading n jets with n == min(maxNjets,njets)
@@ -469,10 +495,10 @@ for event in tree:
       break
 
   # Collect gluino barcodes
-  gBarcodes = {'g1':0,'g2':0} # fill temporary values
+  gBarcodes = {'g1': 0, 'g2': 0} # fill temporary values
 
   # Collect quark -> gluino associations
-  qPDGIDs = { g : {'q1':0,'q2':0,'q3':0} for g in ['g1','g2']} # fill temporary values
+  qPDGIDs = { g : {'q1': 0, 'q2': 0, 'q3': 0} for g in ['g1', 'g2']} # fill temporary values
 
   # Select quarks from gluinos
   QuarksFromGluinos = [iParton() for i in range(nQuarksFromGs)]
@@ -498,7 +524,10 @@ for event in tree:
   Partons = QuarksFromGluinos
   FSRs    = FSRsFromGluinos
 
+  #####################################################
   # Match reco jets to closest parton
+  #####################################################
+
   Assigments = {
     # place holder with temporary values
     'source' : {'gmass' : 0, 'eta': 0, 'mass': 0, 'phi': 0, 'pt' : 0, 'mask': True},
@@ -507,18 +536,18 @@ for event in tree:
     'g1'     : {'q1':-1, 'q2':-1, 'q3':-1, 'f1':0, 'f2':0, 'f3':0, 'mask': True},
     'g2'     : {'q1':-1, 'q2':-1, 'q3':-1, 'f1':0, 'f2':0, 'f3':0, 'mask': True},
   }
+
   MatchedPartons = []
   MatchedFSRs    = []
+
+  # Custom matching criteria: JetsFirst (loop over jets and dR match them to quark from gluinos)
   if 'JetsFirst' in MatchingCriteria:
-    jetIndex         = -1
     matchPartonIndex = -1
-    for jet in SelectedJets: # loop over jets
-      jetIndex   += 1
-      dRmin       = 1E5
-      partonIndex = -1
-      for parton in Partons: # loop over partons
-        if jetIndex == 0: NquarksByFlavour[abs(parton.pdgID)] += 1
-        partonIndex += 1
+    for jetIndex, jet in enumerate(SelectedJets): # loop over jets
+      dRmin = 1E5
+      for partonIndex, parton in enumerate(Partons): # loop over partons
+        if jetIndex == 0:
+          NquarksByFlavour[abs(parton.pdgID)] += 1
         if 'rmMQs' in MatchingCriteria and partonIndex in MatchedPartons: continue # skip matched parton
         dR = jet.DeltaR(parton)
         if dR < dRmin:
@@ -538,192 +567,108 @@ for event in tree:
             print('WARNING: jet (pt={}) on eventNumber={} matched to quark w/ barcode={} but Lea matched to one w/ barcode={}'.format(jet.Pt(),tree.eventNumber,qBarcode,int(jet.BarcodeLeaMatch)))
             matchDoNotAgrees += 1
           else:
-            #print('DEBUG: matching agrees for jet (pt={})'.format(jet.Pt()))
             matchAgrees += 1
-        if gBarcodes['g1'] == 0:
-          gBarcodes['g1']            = qParentBarcode
-          qPDGIDs,qFlavour           = getQuarkFlavour(pdgid,'g1',qPDGIDs)
-          if Assigments['g1'][qFlavour] == -1: # not assigned yet
-            Assigments['g1'][qFlavour]                  = jetIndex
-            Assigments['g1'][qFlavour.replace('q','f')] = pdgid
-          else: # if assigned already, pick up jet with largets pT
-            if SelectedJets[jetIndex].Pt() > SelectedJets[Assigments['g1'][qFlavour]].Pt():
-              Assigments['g1'][qFlavour]                  = jetIndex
-              Assigments['g1'][qFlavour.replace('q','f')] = pdgid
-        else:
-          if gBarcodes['g1'] == qParentBarcode:
-            qPDGIDs,qFlavour           = getQuarkFlavour(pdgid,'g1',qPDGIDs)
-            if Assigments['g1'][qFlavour] == -1: # not assigned yet
-              Assigments['g1'][qFlavour]                  = jetIndex
-              Assigments['g1'][qFlavour.replace('q','f')] = pdgid
-            else: # if assigned already, pick up jet with largets pT
-              if SelectedJets[jetIndex].Pt() > SelectedJets[Assigments['g1'][qFlavour]].Pt():
-                Assigments['g1'][qFlavour]                  = jetIndex
-                Assigments['g1'][qFlavour.replace('q','f')] = pdgid
-          else:
-            qPDGIDs,qFlavour           = getQuarkFlavour(pdgid,'g2',qPDGIDs)
-            if Assigments['g2'][qFlavour] == -1: # not assigned yet
-              Assigments['g2'][qFlavour]                  = jetIndex
-              Assigments['g2'][qFlavour.replace('q','f')] = pdgid
-            else: # if assigned already, pick up jet with largets pT
-              if SelectedJets[jetIndex].Pt() > SelectedJets[Assigments['g2'][qFlavour]].Pt():
-                Assigments['g2'][qFlavour]                  = jetIndex
-                Assigments['g2'][qFlavour.replace('q','f')] = pdgid
+        Assigments = make_assigments(Assigments, gBarcodes, qParentBarcode, pdgid, qPDGIDs, SelectedJets, jetIndex)
       else: # jet does not match a quark from a gluino
         if CheckMatching and jet.BarcodeLeaMatch != -1:
           matchMissing += 1
-  elif MatchingCriteria == 'QuarksFirst': # outdated (give terrible results) [missing pdgid assigments]
-    partonIndex = -1
-    for parton in Partons: # loop over partons
-      partonIndex += 1
-      dRmin        = 1E5
-      jetIndex     = -1
-      for jet in SelectedJets: # loop over jets
-        jetIndex += 1
-        dR        = jet.DeltaR(parton)
-        if dR < dRmin:
-          dRmin            = dR
-          matchPartonIndex = partonIndex
-      if dRmin < dRcut: # parton from a gluino matches a jet
-        if matchPartonIndex not in MatchedPartons: MatchedPartons.append(matchPartonIndex)
-        MatchedPartons.append(matchPartonIndex)
-        # Find to which gluino (g1 or g2) it matches and determines if the parton is q1, q2 or q3 (see convention above)
-        pdgid = Partons[matchPartonIndex].pdgID
-        # Assign to g1 or g2 and fill
-        qParentBarcode = Partons[matchPartonIndex].parentBarcode
-        if CheckMatching:
-          qBarcode = Partons[matchPartonIndex].barcode
-          if qBarcode != int(jet.BarcodeLeaMatch):
-            print('WARNING: jet (pt={}) on eventNumber={} matched to quark w/ barcode={} but Lea matched to one w/ barcode={}'.format(jet.Pt(),tree.eventNumber,qBarcode,int(jet.BarcodeLeaMatch)))
-            matchAgrees += 1
-          else:
-            #print('DEBUG: matching agrees for jet (pt={})'.format(jet.Pt()))
-            matchDoNotAgrees += 1
-        if gBarcodes['g1'] == 0:
-          gBarcodes['g1']            = qParentBarcode
-          qPDGIDs,qFlavour           = getQuarkFlavour(pdgid,'g1',qPDGIDs)
-          Assigments['g1'][qFlavour] = jetIndex
-        else:
-          if gBarcodes['g1'] == qParentBarcode:
-            qPDGIDs,qFlavour           = getQuarkFlavour(pdgid,'g1',qPDGIDs)
-            Assigments['g1'][qFlavour] = jetIndex
-          else:
-            qPDGIDs,qFlavour           = getQuarkFlavour(pdgid,'g2',qPDGIDs)
-            Assigments['g2'][qFlavour] = jetIndex
-      else: # jet does not match a quark from a gluino
-        if CheckMatching and jet.BarcodeLeaMatch != -1:
-          matchMissing += 1
-  elif MatchingCriteria == 'Default': # Use matching decision from TTrees (including matching to FSR quarks
-    jetIndex = -1
-    for jet in SelectedJets: # loop over jets
-      jetIndex += 1
+  # Default matching criteria (use matching decision from TTrees (option: use matching decision for FSR quarks)
+  elif 'Default' in MatchingCriteria:
+    # First: match jets to (last in chain) quarks from gluinos
+    for jetIndex, jet in enumerate(SelectedJets): # loop over jets
       # Check if jet is matched to a quark from a gluino
       qBarcode = int(jet.BarcodeLeaMatch)
       if qBarcode != -1:
-        matchPartonIndex,pdgid,qParentBarcode = getPartonInfo(Partons,qBarcode)
+        matchPartonIndex, pdgid, qParentBarcode = get_parton_info(Partons, qBarcode)
         if matchPartonIndex == -1:
-          print('WARNING: matched parton not found for jet {} which is supposed to be matched to a quark of barcode {}'.format(jetIndex,qBarcode))
+          print('WARNING: matched parton not found for jet {} which is supposed to be matched to a quark of barcode {}'.format(jetIndex, qBarcode))
           print('This matched jet will not be considered, it is likely matched to a top quark decay product which is not listed as a quark from a gluino')
         else: # matched to a quark from a gluino
           MatchedPartons.append(matchPartonIndex)
           jet.matchPartonIndex = matchPartonIndex
           jet.pdgid            = pdgid
+          jet.barcode          = qBarcode
           jet.qParentBarcode   = qParentBarcode
           jet.Matched          = True
-    # Try to match jets to FSR quarks if not enough matched jets
-    if len(MatchedPartons) < 6:
-      jetIndex = -1
-      # First check that we would not end up having more than 6 matched jets
-      JetsMatchingFSR = 0
-      for jet in SelectedJets:
-        jetIndex += 1
-        if jet.Matched: continue # if jet is not matched yet
+    # Collect barcodes of matched quarks
+    barcodes_matched_quarks = [jet.barcode for jet in SelectedJets if jet.Matched]
+    # Get non-matched jets
+    non_matched_jets = [jet for jet in SelectedJets if not jet.Matched]
+    # Second: try to match jets to FSR quarks if not all gluinos are fully matched
+    # Collect barcodes of matched quarks (through FSR quarks)
+    barcodes_matched_fsr_quarks = {} # orig_barcode : jet_pt
+    if len(MatchedPartons) < 6 and 'woFSR' not in MatchingCriteria:
+      for jetIndex, jet in enumerate(non_matched_jets): # loop over non-matched jets
         # Check if jet is matched to an FSR quark
         qBarcode = int(jet.BarcodeLeaFSRMatch)
         if qBarcode != -1:
-          matchPartonIndex,pdgid,qParentBarcode = getFSRInfo(FSRs,qBarcode)
-          if matchPartonIndex == -1:
+          matchPartonIndex, pdgid, qParentBarcode, qOrigBarcode = get_fsr_info(FSRs, qBarcode)
+          if matchPartonIndex == -1: # protection
             print('WARNING: matched FSR quark not found for jet {} which is supposed to be matched to an FSR quark of barcode {}'.format(jetIndex,qBarcode))
             print('MC channel number: {}'.format(tree.mcChannelNumber))
             print('Event number: {}'.format(tree.eventNumber))
             print('This matched jet will not be considered, THIS WAS NOT EXPECTED, exiting')
             sys.exit(1)
           else: # matched to a FSR
-            JetsMatchingFSR += 1
+            if qOrigBarcode not in barcodes_matched_quarks: # make sure no other jet is matched to this quark already
+              # Do not consider this match if it is matched to a gluino for which I have already 3 matches
+              # count jets matched to the same qParentBarcode (gluino)
+              count = sum([1 if j.Matched and j.qParentBarcode==qParentBarcode else 0 for j in SelectedJets])
+              if count < 3:
+                if qOrigBarcode not in barcodes_matched_fsr_quarks: # this quark from gluino was not matched yet
+                  barcodes_matched_fsr_quarks[qOrigBarcode] = jet.Pt()
+                else: # this quark from gluino is already matched to another jet, compare jet pts and match to highest-pt jet
+                  if jet.Pt() > barcodes_matched_fsr_quarks[qOrigBarcode]:
+                    barcodes_matched_fsr_quarks[qOrigBarcode] = jet.Pt()
       # Make sure we don't end up having more than 6 matched jets
-      if len(MatchedPartons) + JetsMatchingFSR <= 6:
+      if len(MatchedPartons) + len(barcodes_matched_fsr_quarks.keys()) <= 6:
         # Decorate jets with FSR matching
-        for jet in SelectedJets:
-          jetIndex += 1
-          if jet.Matched: continue # if jet is not matched yet
+        for jetIndex, jet in enumerate(SelectedJets):
+          if jet.Matched: continue # skip already matched jets
           # Check if jet is matched to an FSR quark
           qBarcode = int(jet.BarcodeLeaFSRMatch)
           if qBarcode != -1:
-            matchPartonIndex,pdgid,qParentBarcode = getFSRInfo(FSRs,qBarcode)
-            MatchedFSRs.append(matchPartonIndex)
-            jet.matchPartonIndex = matchPartonIndex
-            jet.pdgid            = pdgid
-            jet.qParentBarcode   = qParentBarcode
-            jet.Matched          = True
+            matchPartonIndex, pdgid, qParentBarcode, qOrigBarcode = get_fsr_info(FSRs, qBarcode)
+            if qOrigBarcode not in barcodes_matched_quarks and barcodes_matched_fsr_quarks[qOrigBarcode] == jet.Pt(): # make sure no other jet is matched to this quark already and make sure is the jet I want
+              MatchedFSRs.append(matchPartonIndex)
+              jet.matchPartonIndex = matchPartonIndex
+              jet.pdgid            = pdgid
+              jet.barcode          = qOrigBarcode
+              jet.qParentBarcode   = qParentBarcode
+              jet.Matched          = True
+    # Protection
+    n_matched_jets = sum([1 if jet.Matched else 0 for jet in SelectedJets])
+    if n_matched_jets > 6:
+        print('ERROR: more than 6 {} jets are matched, exiting'.format(n_matched_jets))
+        sys.exit(1)
     # Fill info for matched jets
-    jetIndex = -1
-    for jet in SelectedJets: # loop over jets
-      jetIndex += 1
+    for jetIndex, jet in enumerate(SelectedJets): # loop over jets
       if not jet.Matched: continue # skip not matched jet
-      if gBarcodes['g1'] == 0:
-        gBarcodes['g1']  = jet.qParentBarcode
-        qPDGIDs,qFlavour = getQuarkFlavour(jet.pdgid,'g1',qPDGIDs)
-        if Assigments['g1'][qFlavour] == -1: # not assigned yet
-          Assigments['g1'][qFlavour]                  = jetIndex
-          Assigments['g1'][qFlavour.replace('q','f')] = jet.pdgid
-        else: # if assigned already, pick up jet with largets pT
-          if SelectedJets[jetIndex].Pt() > SelectedJets[Assigments['g1'][qFlavour]].Pt():
-            Assigments['g1'][qFlavour]                  = jetIndex
-            Assigments['g1'][qFlavour.replace('q','f')] = jet.pdgid
-      else:
-        if gBarcodes['g1'] == jet.qParentBarcode:
-          qPDGIDs,qFlavour           = getQuarkFlavour(jet.pdgid,'g1',qPDGIDs)
-          if Assigments['g1'][qFlavour] == -1: # not assigned yet
-            Assigments['g1'][qFlavour]                  = jetIndex
-            Assigments['g1'][qFlavour.replace('q','f')] = jet.pdgid
-          else: # if assigned already, pick up jet with largets pT
-            if SelectedJets[jetIndex].Pt() > SelectedJets[Assigments['g1'][qFlavour]].Pt():
-              Assigments['g1'][qFlavour]                  = jetIndex
-              Assigments['g1'][qFlavour.replace('q','f')] = jet.pdgid
-        else:
-          qPDGIDs,qFlavour           = getQuarkFlavour(jet.pdgid,'g2',qPDGIDs)
-          if Assigments['g2'][qFlavour] == -1: # not assigned yet
-            Assigments['g2'][qFlavour]                  = jetIndex
-            Assigments['g2'][qFlavour.replace('q','f')] = jet.pdgid
-          else: # if assigned already, pick up jet with largets pT
-            if SelectedJets[jetIndex].Pt() > SelectedJets[Assigments['g2'][qFlavour]].Pt():
-              Assigments['g2'][qFlavour]                  = jetIndex
-              Assigments['g2'][qFlavour.replace('q','f')] = jet.pdgid
+      Assigments = make_assigments(Assigments, gBarcodes, jet.qParentBarcode, jet.pdgid, qPDGIDs, SelectedJets, jetIndex)
   else:
     print('ERROR: Matching criteria not recognized, exiting')
     sys.exit(1)
  
-  if MatchingCriteria != 'Default':
+  if 'Default' not in MatchingCriteria or MatchingCriteria == 'Default_woFSR':
     if len(MatchedPartons) == 6:
       matchedEventNumbers.append(tree.eventNumber)
       matchedEvents +=1
   else: # consider also FSRs
-    if len(MatchedPartons)+len(MatchedFSRs) == 6:
+    if len(MatchedPartons) + len(MatchedFSRs) == 6:
       matchedEventNumbers.append(tree.eventNumber)
       matchedEvents +=1
 
   # Protection: make sure the same jet was not matched to two partons (if appropriate)
   JetIndexes = [] # indexes of jets matched to partons
-  if MatchingCriteria == 'JetsFirst': # for QuarksFirst, it is expected to have a jet matched to more than one parton
-    for g in ['g1','g2']:
-      for key in Assigments[g]:
-        if key == 'mask' or 'f' in key: continue
-        index = Assigments[g][key]
-        if index != -1:
-          if index not in JetIndexes:
-            JetIndexes.append(index)
-          else:
-            log.warning('Jet index ({}) was assigned to more than one parton!'.format(index))
+  for g in ['g1','g2']:
+    for key in Assigments[g]:
+      if key == 'mask' or 'f' in key: continue
+      index = Assigments[g][key]
+      if index != -1:
+        if index not in JetIndexes:
+          JetIndexes.append(index)
+        else:
+          log.warning('Jet index ({}) was assigned to more than one parton!'.format(index))
 
   # Create arrays with jet info (extend Assigments with jet reco info)
   for case in Structure['all']['source']['cases']:
@@ -757,7 +702,7 @@ for event in tree:
      Assigments['source'][case] = np.array(array)
 
   # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
-  for g in ['g1','g2']:
+  for g in ['g1', 'g2']:
     TempMask = True
     for key in Assigments[g]:
       if key == 'mask' or 'f' in key: continue
@@ -767,11 +712,11 @@ for event in tree:
   # Compare reconstructed gluino mass with true gluino mass
   MultipleJetsMatchingAQuark = False
   AllMatchedJetsIndexes      = []
-  for ig in ['g1','g2']: # loop over gluinos
+  for ig in ['g1', 'g2']: # loop over gluinos
     if Assigments[ig]['mask']: # fully reconstructable gluino (every quark matches a jet)
       Jets2sum   = []
       JetIndexes = []
-      for key in ['q1','q2','q3']:
+      for key in ['q1', 'q2', 'q3']:
         jIndex = Assigments[ig][key]
         if jIndex not in JetIndexes:
           JetIndexes.append(jIndex)
@@ -782,9 +727,9 @@ for event in tree:
           MultipleJetsMatchingAQuark = True
       # Sum assigned jets
       if len(Jets2sum) == 3:
-        JetsSum = Jets2sum[0]+Jets2sum[1]+Jets2sum[2]
+        JetsSum = Jets2sum[0] + Jets2sum[1] + Jets2sum[2]
       elif len(Jets2sum) == 2:
-        JetsSum = Jets2sum[0]+Jets2sum[1]
+        JetsSum = Jets2sum[0] + Jets2sum[1]
       else:
         JetsSum = Jets2sum[0]
       gReco   = JetsSum.M()
@@ -794,14 +739,6 @@ for event in tree:
         print('Event number: {}'.format(tree.eventNumber))
       hRecoMasses[gTruth].Fill(gReco)
       hGluinoMassDiff.Fill(gReco-gTruth)
-    #else: # not fully reconstructable gluino (every quark matches a jet)
-    #  JetIndexes = []
-    #  for key in ['q1','q2','q3']:
-    #    jIndex = Assigments[ig][key]
-    #    if jIndex in JetIndexes:
-    #      MultipleJetsMatchingAQuark = True
-    #    else:
-    #      JetIndexes.append(jIndex)
 
   if MultipleJetsMatchingAQuark:
     multipleQuarkMatchingEvents += 1
