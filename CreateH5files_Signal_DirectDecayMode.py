@@ -21,6 +21,7 @@ ProduceTrainingDataset = True
 ProduceTestingDataset  = True
 Debug                  = False
 MinNjets               = 6
+maxNjets               = 7
 FlavourType            = 'UDB+UDS' # options: All (ALL+UDB+UDS), UDB, UDS, UDB+UDS
 MassPoints             = 'All' # Options: All, Low, Intermediate, IntermediateWo1400, High, 1400
 UseAllFiles            = False  # Use only when running on Lea's files, meant to overrule FlavourType and MassPoints options
@@ -49,7 +50,6 @@ if 'JetsFirst' not in MatchingCriteria:
 
 # Global settings
 dRcut       = 0.4
-maxNjets    = 20
 minJetPt    = 20 # to be safe but there seems to be no jet below 20GeV
 
 # Create file with selected options
