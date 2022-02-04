@@ -3,6 +3,8 @@ import os
 import ROOT
 import numpy as np
 
+# TODO: use normweight for both signal and dijets
+
 SAMPLES = {
   'Signal' : {
     'True' : '/home/jbossios/cern/SUSY/RPVMJ/CreateH5inputs/Git/Outputs/Signal/v24/UDB+UDSSignalData_All_testing.h5',
@@ -14,7 +16,7 @@ SAMPLES = {
   } 
 }
 
-def get_reco_gluino_masses(case: str, case_dict: dict) -> [float]:
+def get_reco_gluino_masses(case: str, case_dict: dict, use_avg: bool = True) -> [float]:
   # Save reconstructed masses using true matched jets for '2g' events
   RecoMasses2g = dict()
 
@@ -37,13 +39,13 @@ def get_reco_gluino_masses(case: str, case_dict: dict) -> [float]:
     RecoMasses2g[level] = []
     # Event loop
     for ievent in range(jetMaskInfo[level].shape[0]):
-      ReconstructableGluinos = 0 if case != 'Dijets' else 2 # number of reconstructable gluinos in this event
-      if case != 'Dijets':
+      ReconstructableGluinos = 0 if case == 'Signal' and level == 'True' else 2 # number of reconstructable gluinos in this event
+      if case == 'Signal' and level == 'True':
         for gCase in ['g1', 'g2']:
           if gluinoInfo['True'][gCase]['mask'][ievent]:
             ReconstructableGluinos += 1
-      if ReconstructableGluinos == 2:
-        masses = dict()
+      if ReconstructableGluinos >= 2: # for signal True, I look at only fully reconstructable events (just for simplicity)
+        if use_avg: masses = dict()
         for gcase in ['g1', 'g2']:
           Jets = []
           for qcase in ['q1', 'q2', 'q3']:
@@ -55,10 +57,9 @@ def get_reco_gluino_masses(case: str, case_dict: dict) -> [float]:
             Jet      = ROOT.TLorentzVector()
             Jet.SetPtEtaPhiM(jetPt,jetEta,jetPhi,jetM)
             Jets.append(Jet)
-          masses[gcase] = (Jets[0]+Jets[1]+Jets[2]).M()
-          #RecoMasses2g.append((Jets[0]+Jets[1]+Jets[2]).M())
-        RecoMasses2g[level].append(0.5 * (masses['g1'] + masses['g2']))
-  #if case == 'Dijets': print(RecoMasses2g)
+          if use_avg: masses[gcase] = (Jets[0]+Jets[1]+Jets[2]).M()
+          else: RecoMasses2g[level].append( (Jets[0]+Jets[1]+Jets[2]).M() )
+        if use_avg: RecoMasses2g[level].append(0.5 * (masses['g1'] + masses['g2']))
   return RecoMasses2g
 
 def make_hist(case: str, masses_dict: dict) -> ROOT.TH1D:
@@ -71,7 +72,7 @@ def make_hist(case: str, masses_dict: dict) -> ROOT.TH1D:
     hists[level] = hist
   return hists
 
-def compare_hists(hists: dict()):
+def compare_hists(hists: dict(), use_avg: bool = True):
   if not os.path.exists('Plots'):
     os.makedirs('Plots')
 
@@ -95,9 +96,11 @@ def compare_hists(hists: dict()):
       Legends.AddEntry(hist, f'{case}_{level}')
       counter += 1
   Stack.Draw('nostack')
-  #Stack.GetXaxis().SetTitle('Reconstructed gluino Mass [GeV]')
-  Stack.GetXaxis().SetTitle('Averaged reconstructed gluino Mass [GeV]')
-  Stack.GetYaxis().SetTitle('Number of (2g) events')
+  if use_avg:
+    Stack.GetXaxis().SetTitle('Averaged reconstructed gluino Mass [GeV]')
+  else:
+    Stack.GetXaxis().SetTitle('Reconstructed gluino Mass [GeV]')
+  Stack.GetYaxis().SetTitle('Number of events')
   Legends.Draw("same")
   Canvas.Update()
   Canvas.Modified()

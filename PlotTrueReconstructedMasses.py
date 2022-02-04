@@ -74,5 +74,5 @@ def make_figure(masses: [float], use_avg: bool = True):
   Canvas.Print(outName+']')
 
 if __name__ == '__main__':
-  values = get_true_reco_gluino_masses('UDB+UDSSignalData_1400_training.h5', True)
-  make_figure(values, True)
+  values = get_true_reco_gluino_masses('UDB+UDSSignalData_1400_training.h5')
+  make_figure(values)
