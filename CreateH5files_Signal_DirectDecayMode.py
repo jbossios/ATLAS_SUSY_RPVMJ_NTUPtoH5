@@ -12,7 +12,8 @@
 #PATH                   = 'SignalInputs/MC16a_Lea/'
 #PATH                   = 'SignalInputs/MC16a_Lea_v3/'
 #PATH                   = 'SignalInputs/MC16a_Lea_v4/'
-PATH                   = 'SignalInputs/MC16a_21_2_173_0/'
+#PATH                   = 'SignalInputs/MC16a_21_2_173_0/'
+PATH                   = 'SignalInputs/MC16a_21_2_173_0_with_normweight/'
 TreeName               = 'trees_SRRPV_'
 ApplyEventSelections   = True
 shuffleJets            = False
@@ -21,7 +22,7 @@ ProduceTrainingDataset = True
 ProduceTestingDataset  = True
 Debug                  = False
 MinNjets               = 6
-maxNjets               = 7
+maxNjets               = 8
 FlavourType            = 'UDB+UDS' # options: All (ALL+UDB+UDS), UDB, UDS, UDB+UDS
 MassPoints             = 'All' # Options: All, Low, Intermediate, IntermediateWo1400, High, 1400
 UseAllFiles            = False  # Use only when running on Lea's files, meant to overrule FlavourType and MassPoints options
@@ -248,8 +249,9 @@ NmatchedQuarksByFlavour = {flav : 0 for flav in [1,2,3,4,5,6]}
 
 # Loop over events
 nPassingEvents = 0
-counter        = -1
+counter = -1
 selectedEvents = 0
+totalEvents = tree.GetEntries()
 for event in tree:
   counter += 1
   AllPassJets   = [iJet().SetPtEtaPhiE(tree.jet_pt[i],tree.jet_eta[i],tree.jet_phi[i],tree.jet_e[i]) for i in range(len(tree.jet_pt)) if tree.jet_passOR[i] and tree.jet_isSig[i] and tree.jet_pt[i] > minJetPt]
@@ -270,7 +272,7 @@ for event in tree:
   else: # use this event for testing
     EventNumbers4Testing.append(counter)
   nPassingEvents += 1
-log.info('{} events were selected'.format(nPassingEvents))
+log.info('{} events out of {} were selected'.format(nPassingEvents, totalEvents))
 
 nPassingTrainingEvents = len(EventNumbers4Training)
 nPassingTestingEvents  = len(EventNumbers4Testing)
@@ -302,6 +304,7 @@ Structure  = {
                  }},
     'g1'     : { 'cases' : ['mask','q1','q2','q3','f1','f2','f3'], 'shape' : (nPassingEvents,) },
     'g2'     : { 'cases' : ['mask','q1','q2','q3','f1','f2','f3'], 'shape' : (nPassingEvents,) },
+    'normweight' : { 'cases' : ['normweight'], 'shape' : (nPassingEvents,) },
   },
   'training' : {
     'source' : { 'cases' : { # variable : shape
@@ -314,6 +317,7 @@ Structure  = {
                  }},
     'g1'     : { 'cases' : ['mask','q1','q2','q3','f1','f2','f3'], 'shape' : (nPassingTrainingEvents,) },
     'g2'     : { 'cases' : ['mask','q1','q2','q3','f1','f2','f3'], 'shape' : (nPassingTrainingEvents,) },
+    'normweight' : { 'cases' : ['normweight'], 'shape' : (nPassingTrainingEvents,) },
   },
   'testing' : {
     'source' : { 'cases' : { # variable : shape
@@ -326,6 +330,7 @@ Structure  = {
                  }},
     'g1'     : { 'cases' : ['mask','q1','q2','q3','f1','f2','f3'], 'shape' : (nPassingTestingEvents,) },
     'g2'     : { 'cases' : ['mask','q1','q2','q3','f1','f2','f3'], 'shape' : (nPassingTestingEvents,) },
+    'normweight' : { 'cases' : ['normweight'], 'shape' : (nPassingTestingEvents,) },
   },
 }
 
@@ -442,7 +447,6 @@ trainingCounter = -1
 testingCounter  = -1
 log.info('About to enter event loop')
 ROOT.EnableImplicitMT(nthreads)
-totalEvents                 = tree.GetEntries()
 matchedEvents               = 0
 multipleQuarkMatchingEvents = 0
 matchedEventNumbers         = []
@@ -460,7 +464,7 @@ for counter, event in enumerate(tree):
   nJets         = len(SelectedJets)
   nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt)
   nFSRsFromGs   = len(tree.truth_FSRFromGluinoQuark_pt)
-  
+
   # Apply event selections
   passEventSelection = True
   if ApplyEventSelections:
@@ -535,6 +539,7 @@ for counter, event in enumerate(tree):
     # jet index for each particle b,q1,q2 (if no matching then -1) and mask set temporarily to True
     'g1'     : {'q1':-1, 'q2':-1, 'q3':-1, 'f1':0, 'f2':0, 'f3':0, 'mask': True},
     'g2'     : {'q1':-1, 'q2':-1, 'q3':-1, 'f1':0, 'f2':0, 'f3':0, 'mask': True},
+    'normweight' : {'normweight':tree.normweight},
   }
 
   MatchedPartons = []
@@ -764,8 +769,8 @@ for counter, event in enumerate(tree):
         log.error('Event is simultaneously not considered for training nor for testing, exiting')
         sys.exit(1)
   else: # Add data to a single h5 file
-    for key in Structure:
-      for case in Structure[key]['cases']:
+    for key in Structure['all']:
+      for case in Structure['all'][key]['cases']:
         Datasets[key+'_'+case][allCounter] = Assigments[key][case]
 
 # Close input file
