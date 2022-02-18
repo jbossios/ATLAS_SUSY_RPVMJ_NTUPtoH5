@@ -17,14 +17,14 @@ PATH                   = 'SignalInputs/MC16a_21_2_173_0_with_normweight/'
 TreeName               = 'trees_SRRPV_'
 ApplyEventSelections   = True
 shuffleJets            = False
-SplitDataset4Training  = True # use 90% of total selected events for training
+SplitDataset4Training  = False # use 90% of total selected events for training
 ProduceTrainingDataset = True
 ProduceTestingDataset  = True
 Debug                  = False
 MinNjets               = 6
 maxNjets               = 8
 FlavourType            = 'UDB+UDS' # options: All (ALL+UDB+UDS), UDB, UDS, UDB+UDS
-MassPoints             = 'All' # Options: All, Low, Intermediate, IntermediateWo1400, High, 1400
+MassPoints             = '1400' # Options: All, Low, Intermediate, IntermediateWo1400, High, 1400
 UseAllFiles            = False  # Use only when running on Lea's files, meant to overrule FlavourType and MassPoints options
 CheckMatching          = False  # Compare my matching with Lea's decision
 MatchingCriteria       = 'Default' # Options: JetsFirst, JetsFirst_rmMQs and Default (use matching decision from TTrees) and Default_woFSR [USE Default]
@@ -44,9 +44,9 @@ if 'JetsFirst' not in MatchingCriteria:
 ###############################
 # Conventions
 ###############################
-# q1 is the first matched quark found for the corresponding gluion (f1 is its pdgID)
-# q2 is the second matched quark found for the corresponding gluion (f2 is its pdgID)
-# q3 is the third matched quark found for the corresponding gluion (f3 is its pdgID)
+# q1 is the first matched quark found for the corresponding gluino (f1 is its pdgID)
+# q2 is the second matched quark found for the corresponding gluino (f2 is its pdgID)
+# q3 is the third matched quark found for the corresponding gluino (f3 is its pdgID)
 # g1 is the first parent gluino for first matched quark
 
 # Global settings
