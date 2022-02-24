@@ -6,6 +6,10 @@ To run any of the scripts mentioned below, you need to source the ```Setup.sh```
 
 ```source Setup.sh```
 
+Clone rpv_matcher:
+
+```git clone git@github.com:jbossios/ATLAS_SUSY_RPVMJ_JetPartonMatcher.git```
+
 # Produce and test HDF5 files
 
 ## ```CreateH5files_ttbar.py```
