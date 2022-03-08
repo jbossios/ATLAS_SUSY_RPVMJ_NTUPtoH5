@@ -12,7 +12,7 @@ from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVParton
 from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVMatcher
 
 # Settings
-PATH                   = 'SignalInputs/MC16a_21_2_173_0_with_normweight/'
+PATH                   = 'SignalInputs/MC16a_21_2_173_0_with_fixed_normweight/'
 TreeName               = 'trees_SRRPV_'
 ApplyEventSelections   = True
 shuffleJets            = False
@@ -25,10 +25,10 @@ maxNjets               = 8
 FlavourType            = 'UDB+UDS' # options: All (ALL+UDB+UDS), UDB, UDS, UDB+UDS
 MassPoints             = '1400' # Options: All, Low, Intermediate, IntermediateWo1400, High, 1400
 UseAllFiles            = False  # Use only when running on Lea's files, meant to overrule FlavourType and MassPoints options
-#MatchingCriteria       = 'UseFTDeltaRvalues' # Options: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority_ptPriority, RecomputeDeltaRvalues_drPriority # FIXME switch to which RecomputeDeltaRvalues?
-#MatchingCriteria       = 'RecomputeDeltaRvalues_ptPriority' # Options: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority # FIXME switch to RecomputeDeltaRvalues
-MatchingCriteria       = 'RecomputeDeltaRvalues_drPriority' # Options: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority # FIXME switch to RecomputeDeltaRvalues
 ForceHalf              = False  # Force to use only half of input events (only works for 1400 samples, MassPoints==1400)
+minJetPt               = 50 # to be safe but there seems to be no jet below 20GeV
+# MatchingCriteria options: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority
+MatchingCriteria       = 'RecomputeDeltaRvalues_drPriority'
 
 ################################################################################
 # DO NOT MODIFY (below this line)
@@ -44,7 +44,6 @@ ForceHalf              = False  # Force to use only half of input events (only w
 
 # Global settings
 dRcut       = 0.4
-minJetPt    = 20 # to be safe but there seems to be no jet below 20GeV
 
 # Create file with selected options
 Config = open('Options.txt','w')
@@ -56,6 +55,7 @@ Config.write('MassPoints           = {}\n'.format(MassPoints))
 Config.write('dRcut                = {}\n'.format(dRcut))
 Config.write('maxNjets             = {}\n'.format(maxNjets))
 Config.write('minJetPt             = {}\n'.format(minJetPt))
+Config.write('MatchingCriteria     = {}\n'.format(MatchingCriteria))
 Config.close()
 
 # Imports
@@ -511,14 +511,15 @@ for counter, event in enumerate(tree):
 
   Assigments = {
     # place holder with temporary values
-    'source' : {'gmass' : 0, 'eta': 0, 'mass': 0, 'phi': 0, 'pt' : 0, 'mask': True},
+    'source': {'gmass' : 0, 'eta': 0, 'mass': 0, 'phi': 0, 'pt' : 0, 'mask': True},
     #'source' : {'eta': 0, 'mass': 0, 'phi': 0, 'pt' : 0, 'mask': True},
     # jet index for each particle b,q1,q2 (if no matching then -1) and mask set temporarily to True
-    'g1'     : {'q1':-1, 'q2':-1, 'q3':-1, 'f1':0, 'f2':0, 'f3':0, 'mask': True},
-    'g2'     : {'q1':-1, 'q2':-1, 'q3':-1, 'f1':0, 'f2':0, 'f3':0, 'mask': True},
-    'normweight' : {'normweight':tree.normweight},
+    'g1': {'q1':-1, 'q2':-1, 'q3':-1, 'f1':0, 'f2':0, 'f3':0, 'mask': True},
+    'g2': {'q1':-1, 'q2':-1, 'q3':-1, 'f1':0, 'f2':0, 'f3':0, 'mask': True},
+    'normweight': {'normweight': tree.normweight},
   }
 
+  # Match jets
   matcher = RPVMatcher(Jets = SelectedJets, Partons = QuarksFromGluinos, FSRs = FSRsFromGluinos)
   if Debug:
     matcher.set_property('Debug', True) # Temporary
@@ -529,26 +530,24 @@ for counter, event in enumerate(tree):
   for jet_index, jet in enumerate(matched_jets):
     if jet.is_matched():
       Assigments = make_assigments(Assigments, gBarcodes, jet.get_match_gluino_barcode(), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index)
-  else:
-    print('ERROR: Matching criteria not recognized, exiting')
-    sys.exit(1)
- 
+
+  # Check if fully matched 
   n_matched_jets = sum([1 if jet.is_matched() else 0 for jet in matched_jets])
   if n_matched_jets == 6:
     matchedEventNumbers.append(tree.eventNumber)
     matchedEvents +=1
 
-  # Protection: make sure the same jet was not matched to two partons (if appropriate)
-  JetIndexes = [] # indexes of jets matched to partons
-  for g in ['g1','g2']:
-    for key in Assigments[g]:
-      if key == 'mask' or 'f' in key: continue
-      index = Assigments[g][key]
-      if index != -1:
-        if index not in JetIndexes:
-          JetIndexes.append(index)
-        else:
-          log.warning('Jet index ({}) was assigned to more than one parton!'.format(index))
+  ## Protection: make sure the same jet was not matched to two partons (if appropriate)
+  #JetIndexes = [] # indexes of jets matched to partons
+  #for g in ['g1','g2']:
+  #  for key in Assigments[g]:
+  #    if key == 'mask' or 'f' in key: continue
+  #    index = Assigments[g][key]
+  #    if index != -1:
+  #      if index not in JetIndexes:
+  #        JetIndexes.append(index)
+  #      else:
+  #        log.warning('Jet index ({}) was assigned to more than one parton!'.format(index))
 
   # Create arrays with jet info (extend Assigments with jet reco info)
   for case in Structure['all']['source']['cases']:
@@ -659,7 +658,7 @@ hGluinoMassDiff.Write()
 outFile.Close()
 
 # Reco gluino mass distributions
-outName = 'ReconstructedGluinoMasses.root'.format()
+outName = 'ReconstructedGluinoMasses_{}.root'.format(MatchingCriteria)
 outFile = ROOT.TFile(outName,'RECREATE')
 for key,hist in hRecoMasses.items():
   hist.Write()
