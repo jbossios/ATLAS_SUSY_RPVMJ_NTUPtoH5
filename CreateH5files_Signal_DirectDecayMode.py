@@ -11,24 +11,55 @@ from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVJet
 from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVParton
 from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVMatcher
 
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument('--version', '--v', action='store', dest='version', default='')
+parser.add_argument('--maxNjets', action='store', dest='maxNjets', default='')
+parser.add_argument('--pTcut', action='store', dest='minJetPt', default='')
+parser.add_argument('--doNotUseFSRs', action='store_true', dest='doNotUseFSRs', default='False')
+parser.add_argument('--doNotSplit4Training', action='store_true', dest='doNotSplit', default=False)
+args = parser.parse_args()
+
+# Protections
+if not args.version:
+  print('ERROR: version (--version OR -v) not provided, exiting')
+  parser.print_help()
+  sys.exit(1)
+if not args.maxNjets:
+  print('ERROR: maxNjets (--maxNjets) not provided, exiting')
+  parser.print_help()
+  sys.exit(1)
+if not args.minJetPt:
+  print('ERROR: minimum jet pT (--pTcut) not provided, exiting')
+  parser.print_help()
+  sys.exit(1)
+
+# User settings
+useFSRs = not args.doNotUseFSRs
+Version = args.version
+maxNjets = int(args.maxNjets)
+minJetPt = int(args.minJetPt)
+
 # Settings
 PATH                   = 'SignalInputs/MC16a_21_2_173_0_with_fixed_normweight/'
 TreeName               = 'trees_SRRPV_'
 ApplyEventSelections   = True
 shuffleJets            = False
-SplitDataset4Training  = False # use 90% of total selected events for training
+SplitDataset4Training  = True # use 90% of total selected events for training
+if args.doNotSplit:
+  SplitDataset4Training  = False # use 90% of total selected events for training
 ProduceTrainingDataset = True
 ProduceTestingDataset  = True
 Debug                  = False
 MinNjets               = 6
-maxNjets               = 8
 FlavourType            = 'UDB+UDS' # options: All (ALL+UDB+UDS), UDB, UDS, UDB+UDS
 MassPoints             = '1400' # Options: All, Low, Intermediate, IntermediateWo1400, High, 1400
 UseAllFiles            = False  # Use only when running on Lea's files, meant to overrule FlavourType and MassPoints options
 ForceHalf              = False  # Force to use only half of input events (only works for 1400 samples, MassPoints==1400)
-minJetPt               = 50 # to be safe but there seems to be no jet below 20GeV
+
 # MatchingCriteria options: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority
-MatchingCriteria       = 'RecomputeDeltaRvalues_drPriority'
+MatchingCriteria = 'RecomputeDeltaRvalues_drPriority'
 
 ################################################################################
 # DO NOT MODIFY (below this line)
@@ -46,7 +77,7 @@ MatchingCriteria       = 'RecomputeDeltaRvalues_drPriority'
 dRcut       = 0.4
 
 # Create file with selected options
-Config = open('Options.txt','w')
+Config = open('Options_{}{}.txt'.format(Version, '_full' if not SplitDataset4Training else ''),'w')
 Config.write('ApplyEventSelections = {}\n'.format(ApplyEventSelections))
 Config.write('ShuffleJets          = {}\n'.format(shuffleJets))
 Config.write('MinNjets             = {}\n'.format(MinNjets))
@@ -60,7 +91,7 @@ Config.close()
 
 # Imports
 import ROOT
-import h5py,os,sys,argparse
+import h5py,os
 import numpy as np
 import pandas as pd
 import random
@@ -379,7 +410,7 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
 ########################################################
 
 if not SplitDataset4Training:
-  outFileName = '{}SignalData_{}.h5'.format(FlavourType,MassPoints)
+  outFileName = 'signal_{}_{}_full_{}.h5'.format(MassPoints,'_'.join(FlavourType.split('+')),Version)
   log.info('Creating {}...'.format(outFileName))
   HF = h5py.File(outFileName, 'w')
   Groups, Datasets = dict(), dict()
@@ -394,7 +425,7 @@ else: # split dataset into training and testing datasets
   Groups      = dict()
   Datasets    = dict()
   for datatype in Datasets2Produce:
-    outFileName = '{}SignalData_{}_{}.h5'.format(FlavourType,MassPoints,datatype)
+    outFileName = 'signal_{}_{}_{}_{}.h5'.format(MassPoints,'_'.join(FlavourType.split('+')),datatype,Version)
     log.info('Creating {}...'.format(outFileName))
     HF = h5py.File(outFileName, 'w')
     Groups[datatype], Datasets[datatype] = dict(), dict()
@@ -520,7 +551,9 @@ for counter, event in enumerate(tree):
   }
 
   # Match jets
-  matcher = RPVMatcher(Jets = SelectedJets, Partons = QuarksFromGluinos, FSRs = FSRsFromGluinos)
+  matcher = RPVMatcher(Jets = SelectedJets, Partons = QuarksFromGluinos)
+  if useFSRs:
+    matcher.add_fsrs(FSRsFromGluinos)
   if Debug:
     matcher.set_property('Debug', True) # Temporary
   matcher.set_property('MatchingCriteria', MatchingCriteria)
@@ -652,13 +685,13 @@ del tree
 HF.close()
 
 # Save histogram
-outName = '{}GluinoMassDiff_{}.root'.format('LeaV3/' if 'Lea' in PATH else '', MatchingCriteria)
+outName = '{}GluinoMassDiff_{}_{}{}.root'.format('LeaV3/' if 'Lea' in PATH else '', MatchingCriteria, Version, '_full' if not SplitDataset4Training else '')
 outFile = ROOT.TFile(outName,'RECREATE')
 hGluinoMassDiff.Write()
 outFile.Close()
 
 # Reco gluino mass distributions
-outName = 'ReconstructedGluinoMasses_{}.root'.format(MatchingCriteria)
+outName = 'ReconstructedGluinoMasses_{}_{}{}.root'.format(MatchingCriteria, Version, '_full' if not SplitDataset4Training else '')
 outFile = ROOT.TFile(outName,'RECREATE')
 for key,hist in hRecoMasses.items():
   hist.Write()
@@ -670,7 +703,7 @@ print('Number of events where 6 quarks are matched: {}'.format(matchedEvents))
 print('percentage of events having a quark matching several jets: {}'.format(multipleQuarkMatchingEvents/totalEvents))
 for flav in [1,2,3,4,5,6]:
   if NquarksByFlavour[flav]!=0: print('Matching efficiency for quarks w/ abs(pdgID)=={}: {}'.format(flav,NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]))
-outFile = open('matchedEvents_{}.txt'.format(MatchingCriteria),'w')
+outFile = open('matchedEvents_{}_{}{}.txt'.format(MatchingCriteria, Version, '_full' if not SplitDataset4Training else ''),'w')
 for event in matchedEventNumbers:
   outFile.write(str(event)+'\n')
 outFile.close()
