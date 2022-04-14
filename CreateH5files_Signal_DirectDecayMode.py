@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--version', '--v', action='store', dest='version', default='')
 parser.add_argument('--maxNjets', action='store', dest='maxNjets', default='')
 parser.add_argument('--pTcut', action='store', dest='minJetPt', default='')
-parser.add_argument('--doNotUseFSRs', action='store_true', dest='doNotUseFSRs', default='False')
+parser.add_argument('--doNotUseFSRs', action='store_true', dest='doNotUseFSRs', default=False)
 parser.add_argument('--doNotSplit4Training', action='store_true', dest='doNotSplit', default=False)
 args = parser.parse_args()
 
@@ -87,6 +87,7 @@ Config.write('dRcut                = {}\n'.format(dRcut))
 Config.write('maxNjets             = {}\n'.format(maxNjets))
 Config.write('minJetPt             = {}\n'.format(minJetPt))
 Config.write('MatchingCriteria     = {}\n'.format(MatchingCriteria))
+Config.write('useFSRs              = {}\n'.format(useFSRs))
 Config.close()
 
 # Imports
@@ -357,21 +358,6 @@ def get_quark_flavour(pdgid, g, dictionary):
     qFlavour = 'q3'
   return dictionary, qFlavour
 
-def get_parton_info(Partons, barcode):
-  """ Get info of quark from gluino matched to a jet """
-  # Loop over quarks from gluinos
-  for partonIndex, parton in enumerate(Partons):
-    if Partons[partonIndex].barcode == barcode:
-      return partonIndex, Partons[partonIndex].pdgID, Partons[partonIndex].parentBarcode
-  return -1,-1,-1
-
-def get_fsr_info(FSRs, barcode):
-  """ Get info of FSR quark matched to a jet """
-  for fsr_index, FSR in enumerate(FSRs): # loop over FSRs
-    if FSRs[fsr_index].barcode == barcode:
-      return fsr_index, FSRs[fsr_index].pdgID, FSRs[fsr_index].parentBarcode, FSRs[fsr_index].originalBarcode
-  return -1,-1,-1,-1
-
 def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dict, selected_jets, jet_index):
   """ Find to which gluino (g1 or g2) a jet was matched and determines if the parton is q1, q2 or q3 (see convention above) """
   if g_barcodes['g1'] == 0: # not assigned yet to any quark parent barcode
@@ -458,6 +444,8 @@ matchedEvents               = 0
 multipleQuarkMatchingEvents = 0
 matchedEventNumbers         = []
 for counter, event in enumerate(tree):
+  log.debug('Processing eventNumber = {}'.format(tree.eventNumber))
+
   # Select reco jets
   AllPassJets = []
   for ijet in range(len(tree.jet_pt)):
@@ -526,7 +514,7 @@ for counter, event in enumerate(tree):
     FSRsFromGluinos[iFSR].SetPtEtaPhiE(tree.truth_FSRFromGluinoQuark_pt[iFSR],tree.truth_FSRFromGluinoQuark_eta[iFSR],tree.truth_FSRFromGluinoQuark_phi[iFSR],tree.truth_FSRFromGluinoQuark_e[iFSR])
     # Find quark which emitted this FSR and get its parentBarcode
     for parton in QuarksFromGluinos:
-      if parton.barcode == tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR]:
+      if parton.get_barcode() == tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR]:
         FSRsFromGluinos[iFSR].set_gluino_barcode(parton.get_gluino_barcode())
         FSRsFromGluinos[iFSR].set_pdgid(parton.get_pdgid())
     FSRsFromGluinos[iFSR].set_barcode(tree.truth_FSRFromGluinoQuark_barcode[iFSR])
