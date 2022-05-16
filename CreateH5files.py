@@ -60,7 +60,7 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
     return assigments
 
 
-def process_file(input_files, settings):
+def process_files(input_files, settings):
 
     from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVJet
     from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVParton
@@ -557,7 +557,7 @@ if __name__ == '__main__':
         args.path = PATH_SIGNALS
         settings = set_settings(args)
         input_files = get_signal_files(settings)
-        process_file(input_files, settings)
+        process_files(input_files, settings)
     elif sample == 'Dijets':
         args.path = PATH_DIJETS
         settings = set_settings(args)
@@ -566,7 +566,7 @@ if __name__ == '__main__':
         from functools import partial
         input_files_listed = [[input_file] for input_file in input_files]
         with Pool(4 if not settings['Debug'] else 1) as p:
-            process_file_partial = partial(process_file, settings = settings)
-            p.map(process_file_partial, input_files_listed)
+            process_files_partial = partial(process_files, settings = settings)
+            p.map(process_files_partial, input_files_listed)
     else:
         print('ERROR: sample=={settings["sample"]} not supported yet')
