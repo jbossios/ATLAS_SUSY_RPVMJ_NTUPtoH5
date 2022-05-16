@@ -60,7 +60,7 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
     return assigments
 
 
-def process_file(input_files, settings):
+def process_files(input_files, settings):
 
     from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVJet
     from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVParton
@@ -100,7 +100,7 @@ def process_file(input_files, settings):
         'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'QGTaggerBDT'],
         'normweight': ['normweight'],
         #'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass'],
-        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass'],  # Temporary (uncomment to use new samples)
+        'EventVars': ['HT', 'deta', 'djmass'],  # Temporary (uncomment to use new samples)
     }
     if do_matching:
         # conventions:
@@ -342,7 +342,7 @@ def process_file(input_files, settings):
     if sample == 'Signal':
         outFileName = 'Signal_{}_{}_full_{}.h5'.format(MassPoints, '_'.join(FlavourType.split('+')), Version)
     else:  # Dijets
-        input_file_name = input_files[0].split('/')
+        input_file_name = input_files[0].split('/')[-1]
         input_file_name = input_file_name.replace('.trees.root', '')
         outFileName = 'Dijets_{}_{}.h5'.format(Version, input_file_name)
     log.info('Creating {}...'.format(outFileName))
@@ -385,6 +385,16 @@ def process_file(input_files, settings):
         for event in matchedEventNumbers:
           outFile.write(str(event)+'\n')
         outFile.close()
+
+
+def get_dijet_files(settings):
+    input_files = []
+    for folder in os.listdir(settings['PATH']):
+        path = f'{settings["PATH"]}{folder}/'
+        for input_file in os.listdir(path):
+            input_files.append(f'{path}{input_file}')
+    return input_files
+
 
 def get_signal_files(settings):
     dsids = {  # all available DSIDs
@@ -557,16 +567,16 @@ if __name__ == '__main__':
         args.path = PATH_SIGNALS
         settings = set_settings(args)
         input_files = get_signal_files(settings)
-        process_file(input_files, settings)
-    elif sample == 'Dijets':
+        process_files(input_files, settings)
+    elif args.sample == 'Dijets':
         args.path = PATH_DIJETS
         settings = set_settings(args)
         input_files = get_dijet_files(settings)
-        from functools import partial
+        from multiprocessing import Pool
         from functools import partial
         input_files_listed = [[input_file] for input_file in input_files]
         with Pool(4 if not settings['Debug'] else 1) as p:
-            process_file_partial = partial(process_file, settings = settings)
-            p.map(process_file_partial, input_files_listed)
+            process_files_partial = partial(process_files, settings = settings)
+            p.map(process_files_partial, input_files_listed)
     else:
         print('ERROR: sample=={settings["sample"]} not supported yet')
