@@ -7,10 +7,19 @@
 #                                                                              #
 ################################################################################
 
+# Imports
+import ROOT
+import h5py
+import os
+import numpy as np
+import random
+random.seed(4) # set the random seed for reproducibility
+import logging
+
 # Global settings
 TTREE_NAME = 'trees_SRRPV_'
 PATH_SIGNALS = 'SignalInputs/MC16a_21_2_173_0_with_fixed_normweight/'
-PATH_DIJETS = '/eos/atlas/atlascerngroupdisk/phys-susy/RPV_mutlijets_ANA-SUSY-2019-24/ntuples/tag/input/mc16e/dijets/PROD0/'
+PATH_DIJETS = '/Users/anthonybadea/Documents/ATLAS/rpvmj/data/dijets/' #'/eos/atlas/atlascerngroupdisk/phys-susy/RPV_mutlijets_ANA-SUSY-2019-24/ntuples/tag/input/mc16e/dijets/PROD0/'
 
 
 def get_quark_flavour(pdgid, g, dictionary):
@@ -143,7 +152,7 @@ def process_files(input_files, settings):
         # Skip events not passing event-level jet cleaning cut
         #if not tree.DFCommonJets_eventClean_LooseBad:  # Temporary (uncomment once I have new samples)
         #    continue
-    
+
         # Select reco jets
         AllPassJets = []
         for ijet in range(len(tree.jet_pt)):
@@ -287,7 +296,8 @@ def process_files(input_files, settings):
         if sample == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
         #Assigments['EventVars']['minAvgMass'] = tree.minAvgMass  # FIXME: need to update branch name!
-   
+        Assigments['normweight']['normweight'] = tree.normweight
+
         if do_matching: 
             # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
             for g in ['g1', 'g2']:
@@ -546,15 +556,7 @@ if __name__ == '__main__':
         print('ERROR: minimum jet pT (--pTcut) not provided, exiting')
         parser.print_help()
         sys.exit(1)
-        
-    # Imports
-    import ROOT
-    import h5py
-    import os
-    import numpy as np
-    import random
-    random.seed(4) # set the random seed for reproducibility
-    import logging
+
     logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
     log = logging.getLogger('CreateH4Files')
     if args.debug: log.setLevel("DEBUG")
