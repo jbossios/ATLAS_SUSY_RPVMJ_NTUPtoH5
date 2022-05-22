@@ -84,6 +84,7 @@ def process_files(input_files, settings):
     Debug = settings['Debug']
     sample = settings['sample']
     log = settings['Logger']
+    outDir = settings['outDir']
     do_matching = False
     if sample == 'Signal':
       MatchingCriteria = settings['MatchingCriteria']
@@ -348,12 +349,14 @@ def process_files(input_files, settings):
     ########################################################
     # Create H5 file
     ########################################################
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
     if sample == 'Signal':
-        outFileName = 'Signal_{}_{}_full_{}.h5'.format(MassPoints, '_'.join(FlavourType.split('+')), Version)
+        outFileName = os.path.join(outDir,'Signal_{}_{}_full_{}.h5'.format(MassPoints, '_'.join(FlavourType.split('+')), Version))
     else:  # Dijets
         input_file_name = input_files[0].split('/')[-1]
         input_file_name = input_file_name.replace('.trees.root', '')
-        outFileName = 'Dijets_{}_{}.h5'.format(Version, input_file_name)
+        outFileName = os.path.join(outDir,'Dijets_{}_{}.h5'.format(Version, input_file_name))
     log.info('Creating {}...'.format(outFileName))
     HF = h5py.File(outFileName, 'w')
     Groups, Datasets = dict(), dict()
@@ -505,6 +508,7 @@ def set_settings(args):
         'sample': args.sample,
         'dRcut': 0.4,
         'Logger': args.logger,
+        'outDir' : args.outDir,
     }
     
     # Create file with selected options
@@ -539,6 +543,8 @@ if __name__ == '__main__':
         help="Choose set of masses from: All, AllExceptX (with X any mass), X (with X any mass), Low, Intermediate, IntermediateWo1400, High")
     parser.add_argument('--flavour', action='store', dest='flavour', default='UDB+UDS', help='UDB+UDS, or UDB, or UDS, or All (ALL+UDB+UDS)')
     parser.add_argument('--debug', action='store_true', dest='debug', default=False)
+    parser.add_argument('--outDir', default='./', help="Output directory for files.")
+    parser.add_argument('--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool.")
     args = parser.parse_args()
     
     # Protections
@@ -576,7 +582,7 @@ if __name__ == '__main__':
         from multiprocessing import Pool
         from functools import partial
         input_files_listed = [[input_file] for input_file in input_files]
-        with Pool(4 if not settings['Debug'] else 1) as p:
+        with Pool(args.ncpu) as p:
             process_files_partial = partial(process_files, settings = settings)
             p.map(process_files_partial, input_files_listed)
     else:
