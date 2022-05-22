@@ -402,9 +402,10 @@ def process_files(input_files, settings):
 def get_dijet_files(settings):
     input_files = []
     for folder in os.listdir(settings['PATH']):
-        path = f'{settings["PATH"]}{folder}/'
+        path = os.path.join(settings['PATH'], folder) #f'{settings["PATH"]}{folder}/'
         for input_file in os.listdir(path):
-            input_files.append(f'{path}{input_file}')
+            if os.path.basename(input_file).endswith('.root'): 
+                input_files.append(f'{path}{input_file}')
     return input_files
 
 
