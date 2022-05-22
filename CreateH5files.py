@@ -19,7 +19,7 @@ import logging
 # Global settings
 TTREE_NAME = 'trees_SRRPV_'
 PATH_SIGNALS = 'SignalInputs/MC16a_21_2_173_0_with_fixed_normweight/'
-PATH_DIJETS = '/Users/anthonybadea/Documents/ATLAS/rpvmj/data/dijets/' #'/eos/atlas/atlascerngroupdisk/phys-susy/RPV_mutlijets_ANA-SUSY-2019-24/ntuples/tag/input/mc16e/dijets/PROD0/'
+PATH_DIJETS = '/eos/atlas/atlascerngroupdisk/phys-susy/RPV_mutlijets_ANA-SUSY-2019-24/ntuples/tag/input/mc16e/dijets/PROD1/'
 
 
 def get_quark_flavour(pdgid, g, dictionary):
@@ -97,7 +97,7 @@ def process_files(input_files, settings):
     # Create TChain using all input ROOT files 
     tree = ROOT.TChain(TTREE_NAME)
     for input_file in input_files:
-      tree.Add(input_file)
+        tree.Add(input_file)
     
     # Collect info to know matching efficiency for each quark flavour
     if do_matching:
@@ -403,9 +403,13 @@ def get_dijet_files(settings):
     input_files = []
     for folder in os.listdir(settings['PATH']):
         path = os.path.join(settings['PATH'], folder) #f'{settings["PATH"]}{folder}/'
-        for input_file in os.listdir(path):
-            if os.path.basename(input_file).endswith('.root'): 
-                input_files.append(f'{path}{input_file}')
+        if os.path.isdir(path):
+            for input_file in os.listdir(path):
+                if os.path.basename(input_file).endswith('.root') and "expanded" in input_file: 
+                    input_files.append(os.path.join(path,input_file))
+        else:
+            if "expanded" in path:
+                input_files.append(path)
     return input_files
 
 
