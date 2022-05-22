@@ -108,8 +108,7 @@ def process_files(input_files, settings):
     Structure = {
         'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'QGTaggerBDT'],
         'normweight': ['normweight'],
-        #'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass'],
-        'EventVars': ['HT', 'deta', 'djmass'],  # Temporary (uncomment to use new samples)
+        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass'],
     }
     if do_matching:
         # conventions:
@@ -295,7 +294,7 @@ def process_files(input_files, settings):
         Assigments['EventVars']['djmass'] = (SelectedJets[0]+SelectedJets[1]).M()
         if sample == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
-        #Assigments['EventVars']['minAvgMass'] = tree.minAvgMass  # FIXME: need to update branch name!
+        Assigments['EventVars']['minAvgMass'] = 0 #tree.minAvgMass  # FIXME: need to update branch name!
         Assigments['normweight']['normweight'] = tree.normweight
 
         if do_matching: 
