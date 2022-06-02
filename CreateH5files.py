@@ -668,6 +668,8 @@ if __name__ == '__main__':
         args.path = PATH_SIGNALS
         settings = set_settings(args)
         input_files = get_signal_files(settings)
+        settings["sum_of_weights"] = get_sum_of_weights(input_files)
+        log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
         process_files(input_files, settings)
     elif args.sample == 'Dijets':
         args.path = PATH_DIJETS
