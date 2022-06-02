@@ -320,8 +320,7 @@ def process_files(input_files, settings):
             SelectedJets[0]+SelectedJets[1]).M()
         if sample == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
-        # tree.minAvgMass  # FIXME: need to update branch name!
-        Assigments['EventVars']['minAvgMass'] = 0
+        Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
         Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / sum_of_weights[dsid]
 
         if do_matching:
