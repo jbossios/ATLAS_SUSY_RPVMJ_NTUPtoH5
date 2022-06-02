@@ -87,7 +87,9 @@ def process_files(input_files, settings):
     sample = settings['sample']
     log = settings['Logger']
     outDir = settings['outDir']
+    sum_of_weights = settings['sum_of_weights']
     do_matching = False
+    dsid = int(input_files[0].split('user.')[1].split('.')[2])
     if sample == 'Signal':
         MatchingCriteria = settings['MatchingCriteria']
         dRcut = settings['dRcut']
@@ -318,9 +320,8 @@ def process_files(input_files, settings):
             SelectedJets[0]+SelectedJets[1]).M()
         if sample == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
-        # tree.minAvgMass  # FIXME: need to update branch name!
-        Assigments['EventVars']['minAvgMass'] = 0
-        Assigments['normweight']['normweight'] = tree.normweight
+        Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
+        Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / sum_of_weights[dsid]
 
         if do_matching:
             # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
@@ -441,15 +442,15 @@ def process_files(input_files, settings):
 def get_dijet_files(settings):
     input_files = []
     for folder in os.listdir(settings['PATH']):
-        # f'{settings["PATH"]}{folder}/'
         path = os.path.join(settings['PATH'], folder)
         if os.path.isdir(path):
             for input_file in os.listdir(path):
-                if os.path.basename(input_file).endswith('.root') and "expanded" in input_file:
+                if os.path.basename(input_file).endswith('.root'):
                     input_files.append(os.path.join(path, input_file))
         else:
-            if "expanded" in path:
-                input_files.append(path)
+            input_files.append(path)
+    # remove expanded files left over
+    input_files = [i for i in input_files if "expanded" not in i]
     return input_files
 
 
@@ -543,6 +544,31 @@ def get_signal_files(settings):
         input_file = f'{settings["PATH"]}{root_file}'
         input_files.append(input_file)
     return input_files
+
+
+def get_sum_of_weights(file_list):
+    # Get sum of weights from all input files (by DSID)
+    sum_of_weights = {}  # sum of weights for each dsid
+    for file_name in file_list:
+        # Make sure it's a ROOT file
+        if not file_name.endswith('.root'):
+            continue
+        # Get metadata from all files, even those w/ empty TTrees
+        try:
+            tfile = ROOT.TFile.Open(file_name)
+        except OSError:
+            raise OSError('{} can not be opened'.format(file_name))
+        # Identify DSID for this file
+        dsid = int(file_name.split('user.')[1].split('.')[2])
+        # Get sum of weights from metadata
+        metadata_hist = tfile.Get('MetaData_EventCount')
+        if dsid not in sum_of_weights:
+            sum_of_weights[dsid] = metadata_hist.GetBinContent(
+                3)  # initial sum of weights
+        else:
+            # initial sum of weights
+            sum_of_weights[dsid] += metadata_hist.GetBinContent(3)
+    return sum_of_weights
 
 
 def set_settings(args):
@@ -647,6 +673,8 @@ if __name__ == '__main__':
         args.path = PATH_DIJETS
         settings = set_settings(args)
         input_files = get_dijet_files(settings)
+        settings["sum_of_weights"] = get_sum_of_weights(input_files)
+        log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
         from multiprocessing import Pool
         from functools import partial
         input_files_listed = [[input_file] for input_file in input_files]
