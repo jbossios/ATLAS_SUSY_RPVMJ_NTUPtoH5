@@ -18,7 +18,7 @@ random.seed(4)  # set the random seed for reproducibility
 
 # Global settings
 TTREE_NAME = 'trees_SRRPV_'
-PATH_SIGNALS = 'SignalInputs/MC16a_21_2_173_0_with_fixed_normweight/'
+PATH_SIGNALS = '/eos/atlas/atlascerngroupdisk/phys-susy/RPV_mutlijets_ANA-SUSY-2019-24/ntuples/tag/input/mc16e/signal/HighStats/PROD0/user.abadea.mc16_13TeV.504509.MGPy8EG_A14NNPDF23LO_GG_rpv_UDB_100_squarks.r10724_PROD0_trees.root/'
 PATH_DIJETS = '/eos/atlas/atlascerngroupdisk/phys-susy/RPV_mutlijets_ANA-SUSY-2019-24/ntuples/tag/input/mc16e/dijets/PROD1/'
 
 
@@ -456,6 +456,10 @@ def get_dijet_files(settings):
 
 def get_signal_files(settings):
     dsids = {  # all available DSIDs
+        "504509": "GG_rpv_UDB_100",
+        "504510": "GG_rpv_UDB_200",
+        "504511": "GG_rpv_UDB_300",
+        "504512": "GG_rpv_UDB_400",
         "504513": "GG_rpv_UDB_900",
         "504514": "GG_rpv_UDB_1000",
         "504515": "GG_rpv_UDB_1100",
@@ -473,6 +477,10 @@ def get_signal_files(settings):
         "504527": "GG_rpv_UDB_2300",
         "504528": "GG_rpv_UDB_2400",
         "504529": "GG_rpv_UDB_2500",
+        "504530": "GG_rpv_UDS_100",
+        "504531": "GG_rpv_UDS_200",
+        "504532": "GG_rpv_UDS_300",
+        "504533": "GG_rpv_UDS_400",
         "504534": "GG_rpv_UDS_900",
         "504535": "GG_rpv_UDS_1000",
         "504536": "GG_rpv_UDS_1100",
@@ -532,16 +540,21 @@ def get_signal_files(settings):
     else:  # individual mass
         dsids_to_use = {dsid: sample for dsid, sample in dsids.items(
         ) if settings['MassPoints'] in sample and sample.split('_')[2] in Flavours}
-
+        
+    print(dsids_to_use)
     # Prepare list of input files
     input_files = []
     for root_file in os.listdir(settings['PATH']):
         if '.root' not in root_file:
             continue  # skip non-TFile files
-        dsid = root_file.replace('.root', '')
+        #dsid = root_file.replace('.root', '')
+        input_file = os.path.join(settings["PATH"],root_file)
+        dsid = input_file.split('user.')[1].split('.')[2]
+        print(dsid)
+        print(input_file)
         if dsid not in dsids_to_use:
             continue  # skip undesired DSID
-        input_file = f'{settings["PATH"]}{root_file}'
+        #input_file = f'{settings["PATH"]}{root_file}'
         input_files.append(input_file)
     return input_files
 
