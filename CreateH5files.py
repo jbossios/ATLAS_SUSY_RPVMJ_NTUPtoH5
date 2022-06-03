@@ -14,7 +14,7 @@ import h5py
 import os
 import numpy as np
 import random
-from multiprocessing import Pool
+import multiprocessing as mp
 from functools import partial
 from glob import glob
 random.seed(4)  # set the random seed for reproducibility
@@ -74,13 +74,14 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
     return assigments
 
 
-def process_files(input_files, settings):
+def process_files(settings):
 
     from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVJet
     from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVParton
     from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVMatcher
 
     # User settings
+    input_file = settings["input_file"]
     Version = settings['Version']
     MinNjets = settings['MinNjets']
     maxNjets = settings['maxNjets']
@@ -103,8 +104,9 @@ def process_files(input_files, settings):
 
     # Create TChain using all input ROOT files
     tree = ROOT.TChain(TTREE_NAME)
-    for input_file in input_files:
-        tree.Add(input_file)
+    tree.Add(input_file)
+    # for input_file in input_files:
+    #     tree.Add(input_file)
 
     # Collect info to know matching efficiency for each quark flavour
     if do_matching:
@@ -396,7 +398,7 @@ def process_files(input_files, settings):
     #     outFileName = os.path.join(
     #         outDir, 'Dijets_{}_{}.h5'.format(Version, input_file_name))
 
-    outFileName = os.path.basename(input_files[0]).replace(".root", ".h5")
+    outFileName = os.path.basename(input_file).replace(".root", ".h5")
     log.info('Creating {}...'.format(outFileName))
     HF = h5py.File(outFileName, 'w')
     Groups, Datasets = dict(), dict()
@@ -448,128 +450,128 @@ def process_files(input_files, settings):
         outFile.close()
 
 
-def get_dijet_files(settings):
-    input_files = []
-    for folder in os.listdir(settings['PATH']):
-        path = os.path.join(settings['PATH'], folder)
-        if os.path.isdir(path):
-            for input_file in os.listdir(path):
-                if os.path.basename(input_file).endswith('.root'):
-                    input_files.append(os.path.join(path, input_file))
-        else:
-            input_files.append(path)
-    # remove expanded files left over
-    input_files = [i for i in input_files if "expanded" not in i]
-    return input_files
+# def get_dijet_files(settings):
+#     input_files = []
+#     for folder in os.listdir(settings['PATH']):
+#         path = os.path.join(settings['PATH'], folder)
+#         if os.path.isdir(path):
+#             for input_file in os.listdir(path):
+#                 if os.path.basename(input_file).endswith('.root'):
+#                     input_files.append(os.path.join(path, input_file))
+#         else:
+#             input_files.append(path)
+#     # remove expanded files left over
+#     input_files = [i for i in input_files if "expanded" not in i]
+#     return input_files
 
 
-def get_signal_files(settings):
-    dsids = {  # all available DSIDs
-        "504509": "GG_rpv_UDB_100",
-        "504510": "GG_rpv_UDB_200",
-        "504511": "GG_rpv_UDB_300",
-        "504512": "GG_rpv_UDB_400",
-        "504513": "GG_rpv_UDB_900",
-        "504514": "GG_rpv_UDB_1000",
-        "504515": "GG_rpv_UDB_1100",
-        "504516": "GG_rpv_UDB_1200",
-        "504517": "GG_rpv_UDB_1300",
-        "504518": "GG_rpv_UDB_1400",
-        "504519": "GG_rpv_UDB_1500",
-        "504520": "GG_rpv_UDB_1600",
-        "504521": "GG_rpv_UDB_1700",
-        "504522": "GG_rpv_UDB_1800",
-        "504523": "GG_rpv_UDB_1900",
-        "504524": "GG_rpv_UDB_2000",
-        "504525": "GG_rpv_UDB_2100",
-        "504526": "GG_rpv_UDB_2200",
-        "504527": "GG_rpv_UDB_2300",
-        "504528": "GG_rpv_UDB_2400",
-        "504529": "GG_rpv_UDB_2500",
-        "504530": "GG_rpv_UDS_100",
-        "504531": "GG_rpv_UDS_200",
-        "504532": "GG_rpv_UDS_300",
-        "504533": "GG_rpv_UDS_400",
-        "504534": "GG_rpv_UDS_900",
-        "504535": "GG_rpv_UDS_1000",
-        "504536": "GG_rpv_UDS_1100",
-        "504537": "GG_rpv_UDS_1200",
-        "504538": "GG_rpv_UDS_1300",
-        "504539": "GG_rpv_UDS_1400",
-        "504540": "GG_rpv_UDS_1500",
-        "504541": "GG_rpv_UDS_1600",
-        "504542": "GG_rpv_UDS_1700",
-        "504543": "GG_rpv_UDS_1800",
-        "504544": "GG_rpv_UDS_1900",
-        "504545": "GG_rpv_UDS_2000",
-        "504546": "GG_rpv_UDS_2100",
-        "504547": "GG_rpv_UDS_2200",
-        "504548": "GG_rpv_UDS_2300",
-        "504549": "GG_rpv_UDS_2400",
-        "504550": "GG_rpv_UDS_2500",
-        "504551": "GG_rpv_ALL_1800",
-        "504552": "GG_rpv_ALL_2200",
-    }
+# def get_signal_files(settings):
+#     dsids = {  # all available DSIDs
+#         "504509": "GG_rpv_UDB_100",
+#         "504510": "GG_rpv_UDB_200",
+#         "504511": "GG_rpv_UDB_300",
+#         "504512": "GG_rpv_UDB_400",
+#         "504513": "GG_rpv_UDB_900",
+#         "504514": "GG_rpv_UDB_1000",
+#         "504515": "GG_rpv_UDB_1100",
+#         "504516": "GG_rpv_UDB_1200",
+#         "504517": "GG_rpv_UDB_1300",
+#         "504518": "GG_rpv_UDB_1400",
+#         "504519": "GG_rpv_UDB_1500",
+#         "504520": "GG_rpv_UDB_1600",
+#         "504521": "GG_rpv_UDB_1700",
+#         "504522": "GG_rpv_UDB_1800",
+#         "504523": "GG_rpv_UDB_1900",
+#         "504524": "GG_rpv_UDB_2000",
+#         "504525": "GG_rpv_UDB_2100",
+#         "504526": "GG_rpv_UDB_2200",
+#         "504527": "GG_rpv_UDB_2300",
+#         "504528": "GG_rpv_UDB_2400",
+#         "504529": "GG_rpv_UDB_2500",
+#         "504530": "GG_rpv_UDS_100",
+#         "504531": "GG_rpv_UDS_200",
+#         "504532": "GG_rpv_UDS_300",
+#         "504533": "GG_rpv_UDS_400",
+#         "504534": "GG_rpv_UDS_900",
+#         "504535": "GG_rpv_UDS_1000",
+#         "504536": "GG_rpv_UDS_1100",
+#         "504537": "GG_rpv_UDS_1200",
+#         "504538": "GG_rpv_UDS_1300",
+#         "504539": "GG_rpv_UDS_1400",
+#         "504540": "GG_rpv_UDS_1500",
+#         "504541": "GG_rpv_UDS_1600",
+#         "504542": "GG_rpv_UDS_1700",
+#         "504543": "GG_rpv_UDS_1800",
+#         "504544": "GG_rpv_UDS_1900",
+#         "504545": "GG_rpv_UDS_2000",
+#         "504546": "GG_rpv_UDS_2100",
+#         "504547": "GG_rpv_UDS_2200",
+#         "504548": "GG_rpv_UDS_2300",
+#         "504549": "GG_rpv_UDS_2400",
+#         "504550": "GG_rpv_UDS_2500",
+#         "504551": "GG_rpv_ALL_1800",
+#         "504552": "GG_rpv_ALL_2200",
+#     }
 
-    # Use only the above samples of the requested flavour (UDS, UDS+UDB, UDB, ALL)
-    Flavours = []
-    if settings['FlavourType'] == 'All':
-        Flavours = ['ALL', 'UDS', 'UDB']
-    if settings['FlavourType'] == 'ALL':
-        Flavours = ['ALL']
-    if 'UDB' in settings['FlavourType']:
-        Flavours.append('UDB')
-    if 'UDS' in settings['FlavourType']:
-        Flavours.append('UDS')
+#     # Use only the above samples of the requested flavour (UDS, UDS+UDB, UDB, ALL)
+#     Flavours = []
+#     if settings['FlavourType'] == 'All':
+#         Flavours = ['ALL', 'UDS', 'UDB']
+#     if settings['FlavourType'] == 'ALL':
+#         Flavours = ['ALL']
+#     if 'UDB' in settings['FlavourType']:
+#         Flavours.append('UDB')
+#     if 'UDS' in settings['FlavourType']:
+#         Flavours.append('UDS')
 
-    # Set samples to use based on the requested mass point(s)
-    if settings['MassPoints'] == 'All':
-        dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split('_')[
-            2] in Flavours}
-    elif 'AllExcept' in settings['MassPoints']:
-        exclude = MassPoints.split('AllExcept')[1]
-        dsids_to_use = {dsid: sample for dsid, sample in dsids.items(
-        ) if exclude not in sample and sample.split('_')[2] in Flavours}
-    elif settings['MassPoints'] == 'Low':
-        masses = ['900', '1000', '1100', '1200', '1300']
-        dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
-            '_')[3] in masses and sample.split('_')[2] in Flavours}
-    elif settings['MassPoints'] == 'Intermediate':
-        masses = ['1400', '1500', '1600', '1700', '1800', '1900']
-        dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
-            '_')[3] in masses and sample.split('_')[2] in Flavours}
-    elif settings['MassPoints'] == 'IntermediateWo1400':
-        masses = ['1500', '1600', '1700', '1800', '1900']
-        dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
-            '_')[3] in masses and sample.split('_')[2] in Flavours}
-    elif settings['MassPoints'] == 'High':
-        masses = ['2000', '2100', '2200', '2300', '2400', '2500']
-        dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
-            '_')[3] in masses and sample.split('_')[2] in Flavours}
-    else:  # individual mass
-        dsids_to_use = {dsid: sample for dsid, sample in dsids.items(
-        ) if settings['MassPoints'] in sample and sample.split('_')[2] in Flavours}
+#     # Set samples to use based on the requested mass point(s)
+#     if settings['MassPoints'] == 'All':
+#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split('_')[
+#             2] in Flavours}
+#     elif 'AllExcept' in settings['MassPoints']:
+#         exclude = MassPoints.split('AllExcept')[1]
+#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items(
+#         ) if exclude not in sample and sample.split('_')[2] in Flavours}
+#     elif settings['MassPoints'] == 'Low':
+#         masses = ['900', '1000', '1100', '1200', '1300']
+#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
+#             '_')[3] in masses and sample.split('_')[2] in Flavours}
+#     elif settings['MassPoints'] == 'Intermediate':
+#         masses = ['1400', '1500', '1600', '1700', '1800', '1900']
+#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
+#             '_')[3] in masses and sample.split('_')[2] in Flavours}
+#     elif settings['MassPoints'] == 'IntermediateWo1400':
+#         masses = ['1500', '1600', '1700', '1800', '1900']
+#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
+#             '_')[3] in masses and sample.split('_')[2] in Flavours}
+#     elif settings['MassPoints'] == 'High':
+#         masses = ['2000', '2100', '2200', '2300', '2400', '2500']
+#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
+#             '_')[3] in masses and sample.split('_')[2] in Flavours}
+#     else:  # individual mass
+#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items(
+#         ) if settings['MassPoints'] in sample and sample.split('_')[2] in Flavours}
 
-    print(dsids_to_use)
-    # Prepare list of input files
-    input_files = []
-    for root_file in os.listdir(settings['PATH']):
-        if '.root' not in root_file:
-            continue  # skip non-TFile files
-        #dsid = root_file.replace('.root', '')
-        input_file = os.path.join(settings["PATH"], root_file)
-        dsid = input_file.split('user.')[1].split('.')[2]
-        print(dsid)
-        print(input_file)
-        if dsid not in dsids_to_use:
-            continue  # skip undesired DSID
-        # input_file = f'{settings["PATH"]}{root_file}'
-        input_files.append(input_file)
-    return input_files
+#     print(dsids_to_use)
+#     # Prepare list of input files
+#     input_files = []
+#     for root_file in os.listdir(settings['PATH']):
+#         if '.root' not in root_file:
+#             continue  # skip non-TFile files
+#         #dsid = root_file.replace('.root', '')
+#         input_file = os.path.join(settings["PATH"], root_file)
+#         dsid = input_file.split('user.')[1].split('.')[2]
+#         print(dsid)
+#         print(input_file)
+#         if dsid not in dsids_to_use:
+#             continue  # skip undesired DSID
+#         # input_file = f'{settings["PATH"]}{root_file}'
+#         input_files.append(input_file)
+#     return input_files
 
 
 def handleInput(data):
-    elif os.path.isfile(data) and ".root" in os.path.basename(data):
+    if os.path.isfile(data) and ".root" in os.path.basename(data):
         return [data]
     elif os.path.isfile(data) and ".txt" in os.path.basename(data):
         return sorted([line.strip() for line in open(data, "r")])
@@ -605,39 +607,39 @@ def get_sum_of_weights(file_list):
     return sum_of_weights
 
 
-def set_settings(args):
-    # User settings
-    settings = {
-        'useFSRs': not args.doNotUseFSRs,
-        'Version': args.version,
-        'maxNjets': int(args.maxNjets),
-        'minJetPt': int(args.minJetPt),
-        'FlavourType': args.flavour,
-        'MassPoints': args.masses,
-        'MatchingCriteria': args.matchingCriteria,
-        'MinNjets': int(args.minNjets),
-        'shuffleJets': args.shuffleJets,
-        'Debug': args.debug,
-        'PATH': args.path,
-        'sample': args.sample,
-        'dRcut': 0.4,
-        'Logger': args.logger,
-        'outDir': args.outDir,
-    }
+# def set_settings(args):
+#     # User settings
+#     settings = {
+#         'useFSRs': not args.doNotUseFSRs,
+#         'Version': args.version,
+#         'maxNjets': int(args.maxNjets),
+#         'minJetPt': int(args.minJetPt),
+#         'FlavourType': args.flavour,
+#         'MassPoints': args.masses,
+#         'MatchingCriteria': args.matchingCriteria,
+#         'MinNjets': int(args.minNjets),
+#         'shuffleJets': args.shuffleJets,
+#         'Debug': args.debug,
+#         'PATH': args.path,
+#         'sample': args.sample,
+#         'dRcut': 0.4,
+#         'Logger': args.logger,
+#         'outDir': args.outDir,
+#     }
 
-    # Create file with selected options
-    Config = open('Options_{}_{}_{}.txt'.format(
-        settings['Version'], settings['MassPoints'], '_'.join(settings['FlavourType'].split('+'))), 'w')
-    for key, value in settings.items():
-        if settings['sample'] == 'Dijets':
-            skip_on_dijets = ['MatchingCriteria',
-                              'MassPoints', 'dRcut', 'useFSRs', 'FlavourType']
-            if key in skip_on_dijets:
-                continue  # skip settings that only make sense on signals
-        Config.write(f'{key} = {value}\n')
-    Config.close()
+#     # Create file with selected options
+#     Config = open('Options_{}_{}_{}.txt'.format(
+#         settings['Version'], settings['MassPoints'], '_'.join(settings['FlavourType'].split('+'))), 'w')
+#     for key, value in settings.items():
+#         if settings['sample'] == 'Dijets':
+#             skip_on_dijets = ['MatchingCriteria',
+#                               'MassPoints', 'dRcut', 'useFSRs', 'FlavourType']
+#             if key in skip_on_dijets:
+#                 continue  # skip settings that only make sense on signals
+#         Config.write(f'{key} = {value}\n')
+#     Config.close()
 
-    return settings
+#     return settings
 
 
 if __name__ == '__main__':
@@ -698,12 +700,14 @@ if __name__ == '__main__':
     args.logger = log
 
     input_files = handleInput(args.inDir)
+    print(input_files)
     sum_of_weights = get_sum_of_weights(input_files)
     log.info('Sum of weights: {}'.format(sum_of_weights))
     confs = []
-    for file in input_files:
-        dsid = int(file.split('user.')[1].split('.')[2])
+    for inFile in input_files:
+        dsid = int(inFile.split('user.')[1].split('.')[2])
         confs.append({
+            'input_file': inFile,
             'useFSRs': not args.doNotUseFSRs,
             'Version': args.version,
             'maxNjets': int(args.maxNjets),
@@ -714,7 +718,7 @@ if __name__ == '__main__':
             'MinNjets': int(args.minNjets),
             'shuffleJets': args.shuffleJets,
             'Debug': args.debug,
-            'PATH': args.path,
+            #'PATH': args.path,
             'sample': args.sample,
             'dRcut': 0.4,
             'Logger': args.logger,
