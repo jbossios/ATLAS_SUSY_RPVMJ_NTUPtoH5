@@ -6,3 +6,5 @@ ATLAS_SUSY_RPVMJ_JetPartonMatcher/
 *.txt
 *.pdf
 *.h5
+*.json
+*.save
