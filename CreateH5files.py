@@ -68,13 +68,12 @@ def main():
     confs = []
     for inFileName in input_files:
         dsid = int(inFileName.split('user.')[1].split('.')[2])
-        outFileName = os.path.basename(inFileName).replace(".root", ".h5")
         confs.append({
             # input settings
             'inFileName': inFileName,
             'sum_of_weights': sum_of_weights[dsid],
             # output settings
-            'outFileName': outFileName,
+            'outFileName': os.path.basename(settings["inFileName"]).replace(".root", ".h5"),
             'Version': args.version,
             # jet settings
             'minJetPt': args.minJetPt,
@@ -86,8 +85,7 @@ def main():
             'useFSRs': not args.doNotUseFSRs,
             'dRcut': 0.4,
             # global settings
-            'Debug': args.debug,
-            # 'log': log,
+            'Debug': args.debug
         })
 
     # launch jobs
