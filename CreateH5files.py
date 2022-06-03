@@ -18,12 +18,14 @@ import os
 import numpy as np
 import random
 import multiprocessing as mp
-from functools import partial
 from glob import glob
 import argparse
 import sys
 random.seed(4)  # set the random seed for reproducibility
 
+# global variables
+logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
+log = logging.getLogger('CreateH4Files')
 
 def main():
 
@@ -36,27 +38,25 @@ def main():
     parser.add_argument('--minNjets', default=6, type=int)
     parser.add_argument('--nQuarksPerGluino', default=6, type=int)
     parser.add_argument('--shuffleJets', action='store_true')
-    parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority',
-                        help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
+    parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority', help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
     parser.add_argument('--doNotUseFSRs', action='store_true')
-    parser.add_argument('--masses', default='1400',
-                        help="Choose set of masses from: All, AllExceptX (with X any mass), X (with X any mass), Low, Intermediate, IntermediateWo1400, High")
-    parser.add_argument('--flavour', default='UDB+UDS',
-                        help='UDB+UDS, or UDB, or UDS, or All (ALL+UDB+UDS)')
     parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--outDir', default='./',
-                        help="Output directory for files.")
-    parser.add_argument('--ncpu', default=1, type=int,
-                        help="Number of cores to use in multiprocessing pool.")
+    parser.add_argument('--outDir', default='./', help="Output directory for files.")
+    parser.add_argument('--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool.")
+    parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files and use outDir as the filename")
     args = parser.parse_args()
 
-    logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
-    log = logging.getLogger('CreateH4Files')
     if args.debug:
         log.setLevel("DEBUG")
 
     # get input files and sum of weights
     input_files = handleInput(args.inDir)
+
+    # if just combine
+    if args.combine:
+        combine_h5(input_files, args.outDir) # Needs to be implemented
+
+    # get sum of weights
     sum_of_weights = get_sum_of_weights(input_files)
     log.info('Sum of weights: {}'.format(sum_of_weights))
 
@@ -73,8 +73,6 @@ def main():
             # input settings
             'inFileName': inFileName,
             'sum_of_weights': sum_of_weights[dsid],
-            'FlavourType': args.flavour,
-            'MassPoints': args.masses,
             # output settings
             'outFileName': outFileName,
             'Version': args.version,
@@ -89,7 +87,7 @@ def main():
             'dRcut': 0.4,
             # global settings
             'Debug': args.debug,
-            'log': log,
+            # 'log': log,
         })
 
     # launch jobs
@@ -239,11 +237,10 @@ def process_files(settings):
     # Create TChain using all input ROOT files
     tree = ROOT.TChain("trees_SRRPV_")
     tree.Add(settings["inFileName"])
-    settings["log"].info('About to enter event loop')
+    log.info('About to enter event loop')
     event_counter = 0
     for counter, event in enumerate(tree):
-        settings["log"].debug(
-            'Processing eventNumber = {}'.format(tree.eventNumber))
+        log.debug('Processing eventNumber = {}'.format(tree.eventNumber))
 
         # Skip events with any number of electrons/muons
         if tree.nBaselineElectrons or tree.nBaselineMuons:
@@ -284,7 +281,7 @@ def process_files(settings):
 
         # Protection
         if nJets > settings['maxNjets']:
-            settings["log"].fatal(f'More than {settings["maxNjets"]} jets were found ({nJets}), fix me!')
+            log.fatal(f'More than {settings["maxNjets"]} jets were found ({nJets}), fix me!')
             sys.exit(1)
 
         # Remove pt ordering in the jet array (if requested)
@@ -468,7 +465,7 @@ def process_files(settings):
     ########################################################
     # Create H5 file
     ########################################################
-    settings["log"].info('Creating {}...'.format(settings["outFileName"]))
+    log.info('Creating {}...'.format(settings["outFileName"]))
     HF = h5py.File(settings["outFileName"], 'w')
     Groups, Datasets = dict(), dict()
     for key in Structure:
@@ -487,30 +484,30 @@ def process_files(settings):
 
     if do_matching:
         # Save histogram
-        outName = f"GluinoMassDiff_{settings['MassPoints']}_{settings['MatchingCriteria']}_{settings['Version']}_{'_'.join(settings['FlavourType'].split('+'))}.root"
+        outName = f"GluinoMassDiff_{settings['MatchingCriteria']}_{settings['Version']}.root"
         outFile = ROOT.TFile(outName, 'RECREATE')
         hGluinoMassDiff.Write()
         outFile.Close()
 
         # Reco gluino mass distributions
-        outName = f"ReconstructedGluinoMasses_{settings['MassPoints']}_{settings['MatchingCriteria']}_{settings['Version']}_{'_'.join(settings['FlavourType'].split('+'))}.root"
+        outName = f"ReconstructedGluinoMasses_{settings['MatchingCriteria']}_{settings['Version']}.root"
         outFile = ROOT.TFile(outName, 'RECREATE')
         for key, hist in hRecoMasses.items():
             hist.Write()
         outFile.Close()
 
-        settings["log"].info(f'matching efficiency (percentage of events where 6 quarks are matched): {matchedEvents/event_counter}')
-        settings["log"].info(f'Number of events where 6 quarks are matched: {matchedEvents}')
-        settings["log"].info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
+        log.info(f'matching efficiency (percentage of events where 6 quarks are matched): {matchedEvents/event_counter}')
+        log.info(f'Number of events where 6 quarks are matched: {matchedEvents}')
+        log.info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
         for flav in quark_flavours:
             if NquarksByFlavour[flav] != 0:
-                settings["log"].info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
-        outName = f"matchedEvents_{settings['MassPoints']}_{settings['MatchingCriteria']}_{settings['Version']}_{'_'.join(settings['FlavourType'].split('+'))}.root"
+                log.info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
+        outName = f"matchedEvents_{settings['MatchingCriteria']}_{settings['Version']}.root"
         with open(outName,"w") as outFile:
             for event in matchedEventNumbers:
                 outFile.write(str(event)+'\n')
 
-    settings["log"].info('>>> ALL DONE <<<')
+    log.info('>>> ALL DONE <<<')
 
 
 if __name__ == '__main__':
