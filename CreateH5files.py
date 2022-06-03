@@ -21,6 +21,7 @@ import multiprocessing as mp
 from functools import partial
 from glob import glob
 import argparse
+import sys
 random.seed(4)  # set the random seed for reproducibility
 
 
@@ -195,23 +196,20 @@ def process_files(settings):
         sample = "Data"
     do_matching = sample == 'Signal'
 
-    # Create TChain using all input ROOT files
-    tree = ROOT.TChain("trees_SRRPV_")
-    tree.Add(settings["inFileName"])
-
-    # Collect info to know matching efficiency for each quark flavour
-    if do_matching:
-        quark_flavours = [1, 2, 3, 4, 5, 6]
-        NquarksByFlavour = {flav: 0 for flav in quark_flavours}
-        NmatchedQuarksByFlavour = {flav: 0 for flav in quark_flavours}
-
     # Set structure of output H5 file
     Structure = {
         'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'QGTaggerBDT'],
         'normweight': ['normweight'],
         'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass'],
     }
+
     if do_matching:
+
+        # Collect info to know matching efficiency for each quark flavour
+        quark_flavours = [1, 2, 3, 4, 5, 6]
+        NquarksByFlavour = {flav: 0 for flav in quark_flavours}
+        NmatchedQuarksByFlavour = {flav: 0 for flav in quark_flavours}
+
         # conventions:
         # q1 is the first matched quark found for the corresponding gluino (f1 is its pdgID)
         # q2 is the second matched quark found for the corresponding gluino (f2 is its pdgID)
@@ -221,8 +219,7 @@ def process_files(settings):
         Structure['g2'] = ['mask', 'q1', 'q2', 'q3', 'f1', 'f2', 'f3']
         Structure['EventVars'].append('gmass')
 
-    # Book histograms
-    if do_matching:
+        # Book histograms
         # Reconstructed mass by truth mass
         Masses = [100, 200, 300, 400] + [900 + i*100 for i in range(0, 17)]
         hRecoMasses = {mass: ROOT.TH1D(f'RecoMass_TruthMass{mass}', '', 300, 0, 3000) for mass in Masses}
@@ -241,6 +238,9 @@ def process_files(settings):
     # Loop over events and fill the numpy arrays on each event
     ##############################################################################################
 
+    # Create TChain using all input ROOT files
+    tree = ROOT.TChain("trees_SRRPV_")
+    tree.Add(settings["inFileName"])
     settings["log"].info('About to enter event loop')
     event_counter = 0
     for counter, event in enumerate(tree):
@@ -248,37 +248,30 @@ def process_files(settings):
             'Processing eventNumber = {}'.format(tree.eventNumber))
 
         # Skip events with any number of electrons/muons
-        # if tree.nBaselineElectrons or tree.nBaselineMuons:  # Temporary (uncomment once I have new samples)
-        #    continue
+        if tree.nBaselineElectrons or tree.nBaselineMuons:
+           continue
 
         # Skip events not passing event-level jet cleaning cut
-        # if not tree.DFCommonJets_eventClean_LooseBad:  # Temporary (uncomment once I have new samples)
-        #    continue
+        if not tree.DFCommonJets_eventClean_LooseBad:
+           continue
 
         # Select reco jets
         AllPassJets = []
         for ijet in range(len(tree.jet_pt)):
-            # if tree.jet_passOR[ijet] and tree.jet_isSig[ijet] and tree.jet_pt[ijet] > minJetPt:
             if tree.jet_pt[ijet] > settings['minJetPt']:
                 jet = RPVJet()
-                jet.SetPtEtaPhiE(
-                    tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
+                jet.SetPtEtaPhiE(tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
                 jet.set_qgtagger_bdt(tree.jet_QGTagger_bdt[ijet])
                 if do_matching and settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
-                    jet.set_matched_parton_barcode(
-                        int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
-                    jet.set_matched_fsr_barcode(
-                        int(tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]))
+                    jet.set_matched_parton_barcode(int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
+                    jet.set_matched_fsr_barcode(int(tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]))
                 AllPassJets.append(jet)
         # select leading n jets with n == min(maxNjets, njets)
-        SelectedJets = [AllPassJets[i]
-                        for i in range(min(settings['maxNjets'], len(AllPassJets)))]
+        SelectedJets = [AllPassJets[i] for i in range(min(settings['maxNjets'], len(AllPassJets)))]
         nJets = len(SelectedJets)
         if do_matching:
-            nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus(
-                "truth_QuarkFromGluino_pt") else 0
-            nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus(
-                "truth_FSRFromGluinoQuark_pt") else 0
+            nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus("truth_QuarkFromGluino_pt") else 0
+            nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus("truth_FSRFromGluinoQuark_pt") else 0
 
         # Apply event selections
         passEventSelection = True
@@ -513,21 +506,18 @@ def process_files(settings):
             hist.Write()
         outFile.Close()
 
-    settings["log"].info('>>> ALL DONE <<<')
-    if do_matching:
         settings["log"].info(f'matching efficiency (percentage of events where 6 quarks are matched): {matchedEvents/event_counter}')
         settings["log"].info(f'Number of events where 6 quarks are matched: {matchedEvents}')
         settings["log"].info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
         for flav in quark_flavours:
             if NquarksByFlavour[flav] != 0:
                 settings["log"].info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
-        # outFile = open('matchedEvents_{}_{}_{}_{}.txt'.format(
-        #     settings['MassPoints'], settings['MatchingCriteria'], settings['Version'], '_'.join(settings['FlavourType'].split('+'))), 'w')
         outName = f"matchedEvents_{settings['MassPoints']}_{settings['MatchingCriteria']}_{settings['Version']}_{'_'.join(settings['FlavourType'].split('+'))}.root"
         with open(outName) as outFile:
             for event in matchedEventNumbers:
                 outFile.write(str(event)+'\n')
-        # outFile.close()
+
+    settings["log"].info('>>> ALL DONE <<<')
 
 
 if __name__ == '__main__':
