@@ -645,6 +645,7 @@ if __name__ == '__main__':
     # Read arguments
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--inDir", required=True)
     parser.add_argument('--version', '--v', action='store',
                         dest='version', default='', required=True)
     parser.add_argument('--sample', action='store',
