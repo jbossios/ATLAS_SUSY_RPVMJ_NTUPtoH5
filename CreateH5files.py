@@ -2,12 +2,15 @@
 #                                                                              #
 # Purpose: ROOT file -> H5 converted                                           #
 #                                                                              #
-# Authour: Jona Bossio (jbossios@cern.ch)                                      #
+# Authour: Jona Bossio (jbossios@cern.ch), Anthony Badea (abadea@cern.ch)      #
 # Date:    10 May 2022                                                         #
 #                                                                              #
 ################################################################################
 
 # Imports
+from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVMatcher
+from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVParton
+from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVJet
 import logging
 import ROOT
 import h5py
@@ -17,13 +20,10 @@ import random
 import multiprocessing as mp
 from functools import partial
 from glob import glob
+import argparse
 random.seed(4)  # set the random seed for reproducibility
 
-# Global settings
-TTREE_NAME = 'trees_SRRPV_'
-PATH_SIGNALS = '/eos/atlas/atlascerngroupdisk/phys-susy/RPV_mutlijets_ANA-SUSY-2019-24/ntuples/tag/input/mc16e/signal/HighStats/PROD0/user.abadea.mc16_13TeV.504509.MGPy8EG_A14NNPDF23LO_GG_rpv_UDB_100_squarks.r10724_PROD0_trees.root/'
-PATH_DIJETS = '/eos/atlas/atlascerngroupdisk/phys-susy/RPV_mutlijets_ANA-SUSY-2019-24/ntuples/tag/input/mc16e/dijets/PROD1/'
-
+# custom code
 
 def get_quark_flavour(pdgid, g, dictionary):
     """ Function that assigns quarks to q1, q2 or q3 """
@@ -76,37 +76,31 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
 
 def process_files(settings):
 
-    from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVJet
-    from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVParton
-    from ATLAS_SUSY_RPVMJ_JetPartonMatcher.rpv_matcher.rpv_matcher import RPVMatcher
-
     # User settings
-    input_file = settings["input_file"]
+    # input_file = settings["input_file"]
     Version = settings['Version']
-    MinNjets = settings['MinNjets']
-    maxNjets = settings['maxNjets']
-    minJetPt = settings['minJetPt']
-    shuffleJets = settings['shuffleJets']
-    Debug = settings['Debug']
-    sample = settings['sample']
-    log = settings['Logger']
-    outDir = settings['outDir']
-    sum_of_weights = settings['sum_of_weights']
-    do_matching = False
-    # dsid = int(input_files[0].split('user.')[1].split('.')[2])
-    if sample == 'Signal':
-        MatchingCriteria = settings['MatchingCriteria']
-        dRcut = settings['dRcut']
-        useFSRs = settings['useFSRs']
-        MassPoints = settings['MassPoints']
-        FlavourType = settings['FlavourType']
-        do_matching = True
+    # MinNjets = settings['MinNjets']
+    # maxNjets = settings['maxNjets']
+    # minJetPt = settings['minJetPt']
+    # shuffleJets = settings['shuffleJets']
+    # Debug = settings['Debug']
+    # sample = settings['sample']
+    # log = settings['Logger']
+    # outDir = settings['outDir']
+    # sum_of_weights = settings['sum_of_weights']
+    do_matching = settings['sample'] == 'Signal'
+
+    # if settings['sample'] == 'Signal':
+        # MatchingCriteria = settings['MatchingCriteria']
+        # dRcut = settings['dRcut']
+        # useFSRs = settings['useFSRs']
+        # MassPoints = settings['MassPoints']
+        # FlavourType = settings['FlavourType']
+        # do_matching = True
 
     # Create TChain using all input ROOT files
-    tree = ROOT.TChain(TTREE_NAME)
-    tree.Add(input_file)
-    # for input_file in input_files:
-    #     tree.Add(input_file)
+    tree = ROOT.TChain("trees_SRRPV_")
+    tree.Add(settings["inFileName"])
 
     # Collect info to know matching efficiency for each quark flavour
     if do_matching:
@@ -150,10 +144,10 @@ def process_files(settings):
     # Loop over events and fill the numpy arrays on each event
     ##############################################################################################
 
-    log.info('About to enter event loop')
+    settings['Logger'].info('About to enter event loop')
     event_counter = 0
     for counter, event in enumerate(tree):
-        log.debug('Processing eventNumber = {}'.format(tree.eventNumber))
+        settings['Logger'].debug('Processing eventNumber = {}'.format(tree.eventNumber))
 
         # Skip events with any number of electrons/muons
         # if tree.nBaselineElectrons or tree.nBaselineMuons:  # Temporary (uncomment once I have new samples)
@@ -167,12 +161,12 @@ def process_files(settings):
         AllPassJets = []
         for ijet in range(len(tree.jet_pt)):
             # if tree.jet_passOR[ijet] and tree.jet_isSig[ijet] and tree.jet_pt[ijet] > minJetPt:
-            if tree.jet_pt[ijet] > minJetPt:
+            if tree.jet_pt[ijet] > settings['minJetPt']:
                 jet = RPVJet()
                 jet.SetPtEtaPhiE(
                     tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
                 jet.set_qgtagger_bdt(tree.jet_QGTagger_bdt[ijet])
-                if do_matching and MatchingCriteria == 'UseFTDeltaRvalues':
+                if do_matching and settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
                     jet.set_matched_parton_barcode(
                         int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
                     jet.set_matched_fsr_barcode(
@@ -180,7 +174,7 @@ def process_files(settings):
                 AllPassJets.append(jet)
         # select leading n jets with n == min(maxNjets, njets)
         SelectedJets = [AllPassJets[i]
-                        for i in range(min(maxNjets, len(AllPassJets)))]
+                        for i in range(min(settings['maxNjets'], len(AllPassJets)))]
         nJets = len(SelectedJets)
         if do_matching:
             nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus(
@@ -190,7 +184,7 @@ def process_files(settings):
 
         # Apply event selections
         passEventSelection = True
-        if nJets < MinNjets:
+        if nJets < settings['MinNjets']:
             passEventSelection = False
         if do_matching and nQuarksFromGs != 6:
             passEventSelection = False
@@ -200,16 +194,16 @@ def process_files(settings):
         event_counter += 1
 
         # Protection
-        if nJets > maxNjets:
-            log.fatal(f'More than {maxNjets} jets were found ({nJets}), fix me!')
+        if nJets > settings['maxNjets']:
+            settings['Logger'].fatal(f'More than {settings["maxNjets"]} jets were found ({nJets}), fix me!')
             sys.exit(1)
 
         # Remove pt ordering in the jet array (if requested)
-        if shuffleJets:
+        if settings['shuffleJets']:
             random.shuffle(SelectedJets)
 
         # Extract gluino mass
-        if sample == 'Signal':
+        if settings['sample'] == 'Signal':
             for ipart in range(len(tree.truth_parent_m)):  # loop over truth particles
                 if tree.truth_parent_pdgId[ipart] == 1000021:  # it's a gluino
                     gmass = tree.truth_parent_m[ipart]
@@ -269,11 +263,11 @@ def process_files(settings):
         # Match reco jets to closest parton
         if do_matching:
             matcher = RPVMatcher(Jets=SelectedJets, Partons=QuarksFromGluinos)
-            if useFSRs:
+            if settings['useFSRs']:
                 matcher.add_fsrs(FSRsFromGluinos)
-            if Debug:
+            if settings['Debug']:
                 matcher.set_property('Debug', True)
-            matcher.set_property('MatchingCriteria', MatchingCriteria)
+            matcher.set_property('MatchingCriteria', settings['MatchingCriteria'])
             matched_jets = matcher.match()
 
             # Fill Assigments (info for matched jets)
@@ -311,8 +305,8 @@ def process_files(settings):
                     array.append(j.get_qgtagger_bdt())
             ht_calculated = True
             # add extra (padding) jets to keep the number of jets fixed
-            if nJets < maxNjets:
-                for i in range(nJets, maxNjets):
+            if nJets < settings['maxNjets']:
+                for i in range(nJets, settings['maxNjets']):
                     if case != 'mask':
                         array.append(0.)
                     else:
@@ -325,12 +319,12 @@ def process_files(settings):
             SelectedJets[1].Eta()
         Assigments['EventVars']['djmass'] = (
             SelectedJets[0]+SelectedJets[1]).M()
-        if sample == 'Signal':
+        if settings['sample'] == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
         Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
         Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * \
             tree.weight_filtEff * tree.weight_kFactor * \
-            tree.weight_xs / sum_of_weights #[dsid]
+            tree.weight_xs / settings['sum_of_weights']
 
         if do_matching:
             # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
@@ -387,20 +381,8 @@ def process_files(settings):
     ########################################################
     # Create H5 file
     ########################################################
-    if not os.path.isdir(outDir):
-        os.makedirs(outDir)
-    # if sample == 'Signal':
-    #     outFileName = os.path.join(outDir, 'Signal_{}_{}_full_{}.h5'.format(
-    #         MassPoints, '_'.join(FlavourType.split('+')), Version))
-    # else:  # Dijets
-    #     input_file_name = input_files[0].split('/')[-1]
-    #     input_file_name = input_file_name.replace('.trees.root', '')
-    #     outFileName = os.path.join(
-    #         outDir, 'Dijets_{}_{}.h5'.format(Version, input_file_name))
-
-    outFileName = os.path.basename(input_file).replace(".root", ".h5")
-    log.info('Creating {}...'.format(outFileName))
-    HF = h5py.File(outFileName, 'w')
+    settings['Logger'].info('Creating {}...'.format(settings["outFileName"]))
+    HF = h5py.File(settings["outFileName"], 'w')
     Groups, Datasets = dict(), dict()
     for key in Structure:
         Groups[key] = HF.create_group(key)
@@ -419,20 +401,20 @@ def process_files(settings):
     if do_matching:
         # Save histogram
         outName = 'GluinoMassDiff_{}_{}_{}_{}.root'.format(
-            MassPoints, MatchingCriteria, Version, '_'.join(FlavourType.split('+')))
+            settings['MassPoints'], settings['MatchingCriteria'], Version, '_'.join(settings['FlavourType'].split('+')))
         outFile = ROOT.TFile(outName, 'RECREATE')
         hGluinoMassDiff.Write()
         outFile.Close()
 
         # Reco gluino mass distributions
         outName = 'ReconstructedGluinoMasses_{}_{}_{}_{}.root'.format(
-            MassPoints, MatchingCriteria, Version, '_'.join(FlavourType.split('+')))
+            settings['MassPoints'], settings['MatchingCriteria'], Version, '_'.join(settings['FlavourType'].split('+')))
         outFile = ROOT.TFile(outName, 'RECREATE')
         for key, hist in hRecoMasses.items():
             hist.Write()
         outFile.Close()
 
-    log.info('>>> ALL DONE <<<')
+    settings['Logger'].info('>>> ALL DONE <<<')
     if do_matching:
         print('matching efficiency (percentage of events where 6 quarks are matched): {}'.format(
             matchedEvents/event_counter))
@@ -444,130 +426,10 @@ def process_files(settings):
                 print('Matching efficiency for quarks w/ abs(pdgID)=={}: {}'.format(flav,
                                                                                     NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]))
         outFile = open('matchedEvents_{}_{}_{}_{}.txt'.format(
-            MassPoints, MatchingCriteria, Version, '_'.join(FlavourType.split('+'))), 'w')
+            settings['MassPoints'], settings['MatchingCriteria'], Version, '_'.join(settings['FlavourType'].split('+'))), 'w')
         for event in matchedEventNumbers:
             outFile.write(str(event)+'\n')
         outFile.close()
-
-
-# def get_dijet_files(settings):
-#     input_files = []
-#     for folder in os.listdir(settings['PATH']):
-#         path = os.path.join(settings['PATH'], folder)
-#         if os.path.isdir(path):
-#             for input_file in os.listdir(path):
-#                 if os.path.basename(input_file).endswith('.root'):
-#                     input_files.append(os.path.join(path, input_file))
-#         else:
-#             input_files.append(path)
-#     # remove expanded files left over
-#     input_files = [i for i in input_files if "expanded" not in i]
-#     return input_files
-
-
-# def get_signal_files(settings):
-#     dsids = {  # all available DSIDs
-#         "504509": "GG_rpv_UDB_100",
-#         "504510": "GG_rpv_UDB_200",
-#         "504511": "GG_rpv_UDB_300",
-#         "504512": "GG_rpv_UDB_400",
-#         "504513": "GG_rpv_UDB_900",
-#         "504514": "GG_rpv_UDB_1000",
-#         "504515": "GG_rpv_UDB_1100",
-#         "504516": "GG_rpv_UDB_1200",
-#         "504517": "GG_rpv_UDB_1300",
-#         "504518": "GG_rpv_UDB_1400",
-#         "504519": "GG_rpv_UDB_1500",
-#         "504520": "GG_rpv_UDB_1600",
-#         "504521": "GG_rpv_UDB_1700",
-#         "504522": "GG_rpv_UDB_1800",
-#         "504523": "GG_rpv_UDB_1900",
-#         "504524": "GG_rpv_UDB_2000",
-#         "504525": "GG_rpv_UDB_2100",
-#         "504526": "GG_rpv_UDB_2200",
-#         "504527": "GG_rpv_UDB_2300",
-#         "504528": "GG_rpv_UDB_2400",
-#         "504529": "GG_rpv_UDB_2500",
-#         "504530": "GG_rpv_UDS_100",
-#         "504531": "GG_rpv_UDS_200",
-#         "504532": "GG_rpv_UDS_300",
-#         "504533": "GG_rpv_UDS_400",
-#         "504534": "GG_rpv_UDS_900",
-#         "504535": "GG_rpv_UDS_1000",
-#         "504536": "GG_rpv_UDS_1100",
-#         "504537": "GG_rpv_UDS_1200",
-#         "504538": "GG_rpv_UDS_1300",
-#         "504539": "GG_rpv_UDS_1400",
-#         "504540": "GG_rpv_UDS_1500",
-#         "504541": "GG_rpv_UDS_1600",
-#         "504542": "GG_rpv_UDS_1700",
-#         "504543": "GG_rpv_UDS_1800",
-#         "504544": "GG_rpv_UDS_1900",
-#         "504545": "GG_rpv_UDS_2000",
-#         "504546": "GG_rpv_UDS_2100",
-#         "504547": "GG_rpv_UDS_2200",
-#         "504548": "GG_rpv_UDS_2300",
-#         "504549": "GG_rpv_UDS_2400",
-#         "504550": "GG_rpv_UDS_2500",
-#         "504551": "GG_rpv_ALL_1800",
-#         "504552": "GG_rpv_ALL_2200",
-#     }
-
-#     # Use only the above samples of the requested flavour (UDS, UDS+UDB, UDB, ALL)
-#     Flavours = []
-#     if settings['FlavourType'] == 'All':
-#         Flavours = ['ALL', 'UDS', 'UDB']
-#     if settings['FlavourType'] == 'ALL':
-#         Flavours = ['ALL']
-#     if 'UDB' in settings['FlavourType']:
-#         Flavours.append('UDB')
-#     if 'UDS' in settings['FlavourType']:
-#         Flavours.append('UDS')
-
-#     # Set samples to use based on the requested mass point(s)
-#     if settings['MassPoints'] == 'All':
-#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split('_')[
-#             2] in Flavours}
-#     elif 'AllExcept' in settings['MassPoints']:
-#         exclude = MassPoints.split('AllExcept')[1]
-#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items(
-#         ) if exclude not in sample and sample.split('_')[2] in Flavours}
-#     elif settings['MassPoints'] == 'Low':
-#         masses = ['900', '1000', '1100', '1200', '1300']
-#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
-#             '_')[3] in masses and sample.split('_')[2] in Flavours}
-#     elif settings['MassPoints'] == 'Intermediate':
-#         masses = ['1400', '1500', '1600', '1700', '1800', '1900']
-#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
-#             '_')[3] in masses and sample.split('_')[2] in Flavours}
-#     elif settings['MassPoints'] == 'IntermediateWo1400':
-#         masses = ['1500', '1600', '1700', '1800', '1900']
-#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
-#             '_')[3] in masses and sample.split('_')[2] in Flavours}
-#     elif settings['MassPoints'] == 'High':
-#         masses = ['2000', '2100', '2200', '2300', '2400', '2500']
-#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items() if sample.split(
-#             '_')[3] in masses and sample.split('_')[2] in Flavours}
-#     else:  # individual mass
-#         dsids_to_use = {dsid: sample for dsid, sample in dsids.items(
-#         ) if settings['MassPoints'] in sample and sample.split('_')[2] in Flavours}
-
-#     print(dsids_to_use)
-#     # Prepare list of input files
-#     input_files = []
-#     for root_file in os.listdir(settings['PATH']):
-#         if '.root' not in root_file:
-#             continue  # skip non-TFile files
-#         #dsid = root_file.replace('.root', '')
-#         input_file = os.path.join(settings["PATH"], root_file)
-#         dsid = input_file.split('user.')[1].split('.')[2]
-#         print(dsid)
-#         print(input_file)
-#         if dsid not in dsids_to_use:
-#             continue  # skip undesired DSID
-#         # input_file = f'{settings["PATH"]}{root_file}'
-#         input_files.append(input_file)
-#     return input_files
 
 
 def handleInput(data):
@@ -606,46 +468,10 @@ def get_sum_of_weights(file_list):
             sum_of_weights[dsid] += metadata_hist.GetBinContent(3)
     return sum_of_weights
 
-
-# def set_settings(args):
-#     # User settings
-#     settings = {
-#         'useFSRs': not args.doNotUseFSRs,
-#         'Version': args.version,
-#         'maxNjets': int(args.maxNjets),
-#         'minJetPt': int(args.minJetPt),
-#         'FlavourType': args.flavour,
-#         'MassPoints': args.masses,
-#         'MatchingCriteria': args.matchingCriteria,
-#         'MinNjets': int(args.minNjets),
-#         'shuffleJets': args.shuffleJets,
-#         'Debug': args.debug,
-#         'PATH': args.path,
-#         'sample': args.sample,
-#         'dRcut': 0.4,
-#         'Logger': args.logger,
-#         'outDir': args.outDir,
-#     }
-
-#     # Create file with selected options
-#     Config = open('Options_{}_{}_{}.txt'.format(
-#         settings['Version'], settings['MassPoints'], '_'.join(settings['FlavourType'].split('+'))), 'w')
-#     for key, value in settings.items():
-#         if settings['sample'] == 'Dijets':
-#             skip_on_dijets = ['MatchingCriteria',
-#                               'MassPoints', 'dRcut', 'useFSRs', 'FlavourType']
-#             if key in skip_on_dijets:
-#                 continue  # skip settings that only make sense on signals
-#         Config.write(f'{key} = {value}\n')
-#     Config.close()
-
-#     return settings
-
-
 if __name__ == '__main__':
 
     # Read arguments
-    import argparse
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--inDir", required=True)
     parser.add_argument('--version', '--v', action='store',
@@ -678,36 +504,27 @@ if __name__ == '__main__':
                         help="Number of cores to use in multiprocessing pool.")
     args = parser.parse_args()
 
-    # Protections
-    # import sys
-    # if not args.version:
-    #     print('ERROR: version (--version OR -v) not provided, exiting')
-    #     parser.print_help()
-    #     sys.exit(1)
-    # if not args.maxNjets:
-    #     print('ERROR: maxNjets (--maxNjets) not provided, exiting')
-    #     parser.print_help()
-    #     sys.exit(1)
-    # if not args.minJetPt:
-    #     print('ERROR: minimum jet pT (--pTcut) not provided, exiting')
-    #     parser.print_help()
-    #     sys.exit(1)
-
     logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
     log = logging.getLogger('CreateH4Files')
     if args.debug:
         log.setLevel("DEBUG")
-    args.logger = log
 
     input_files = handleInput(args.inDir)
-    print(input_files)
     sum_of_weights = get_sum_of_weights(input_files)
     log.info('Sum of weights: {}'.format(sum_of_weights))
+    
+    # prepare outdir
+    if not os.path.isdir(args.outDir):
+        os.makedirs(args.outDir)
+
     confs = []
-    for inFile in input_files:
-        dsid = int(inFile.split('user.')[1].split('.')[2])
+    for inFileName in input_files:
+        dsid = int(inFileName.split('user.')[1].split('.')[2])
+        outFileName = os.path.basename(inFileName).replace(".root", ".h5")  # include version, ptcut, max jets, etc in name
         confs.append({
-            'input_file': inFile,
+            'inFileName': inFileName,
+            'outFileName': outFileName,
+            'sum_of_weights': sum_of_weights[dsid],
             'useFSRs': not args.doNotUseFSRs,
             'Version': args.version,
             'maxNjets': int(args.maxNjets),
@@ -718,12 +535,10 @@ if __name__ == '__main__':
             'MinNjets': int(args.minNjets),
             'shuffleJets': args.shuffleJets,
             'Debug': args.debug,
-            #'PATH': args.path,
             'sample': args.sample,
-            'dRcut': 0.4,
-            'Logger': args.logger,
-            'outDir': args.outDir,
-            'sum_of_weights': sum_of_weights[dsid]
+            # 'dRcut': 0.4, # NOT USED
+            'Logger': log,
+            
         })
 
     # launch jobs
@@ -732,32 +547,3 @@ if __name__ == '__main__':
             process_files(conf)
     else:
         results = mp.Pool(args.ncpu).map(process_files, confs)
-
-    # Find input files
-    # signal: will create a TChain using all input files
-    # dijets: will run on each input file separately
-    # if args.sample == 'Signal':
-    #     args.path = PATH_SIGNALS
-    #     settings = set_settings(args)
-    #     input_files = get_signal_files(settings)
-    #     settings["sum_of_weights"] = get_sum_of_weights(input_files)
-    #     log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
-    #     # process_files(input_files, settings)
-    #     input_files_listed = [[input_file] for input_file in input_files]
-    #     print(input_files_listed)
-    #     print(settings)
-    #     with Pool(args.ncpu) as p:
-    #         process_files_partial = partial(process_files, settings=settings)
-    #         p.map(process_files_partial, input_files_listed)
-    # elif args.sample == 'Dijets':
-    #     args.path = PATH_DIJETS
-    #     settings = set_settings(args)
-    #     input_files = get_dijet_files(settings)
-    #     settings["sum_of_weights"] = get_sum_of_weights(input_files)
-    #     log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
-    #     input_files_listed = [[input_file] for input_file in input_files]
-    #     with Pool(args.ncpu) as p:
-    #         process_files_partial = partial(process_files, settings=settings)
-    #         p.map(process_files_partial, input_files_listed)
-    # else:
-    #     print('ERROR: sample=={settings["sample"]} not supported yet')
