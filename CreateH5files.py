@@ -68,20 +68,37 @@ def main():
     # make job configurations
     confs = []
     for inFileName in input_files:
+        
+        # understand file type
+        sample = "Signal"
+        if "dijet" in settings["inFileName"]:
+            sample = "Dijet"
+        elif "data" in settings["inFileName"]:
+            sample = "Data"
+        do_matching = sample == 'Signal'
         dsid = int(inFileName.split('user.')[1].split('.')[2])
+
+        # create outfile tag
+        tag = f"v{args.version}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}"
+        if do_matching:
+            criteriaTag = {'UseFTDeltaRvalues':'FTDR', 'RecomputeDeltaRvalues_ptPriority': 'RDR_pt', 'RecomputeDeltaRvalues_drPriority' : 'RDR_dr'}
+            tag += f"_{criteriaTag[args.matchingCriteria]}"
+
         confs.append({
             # input settings
             'inFileName': inFileName,
             'sum_of_weights': sum_of_weights[dsid],
+            'sample' : sample
             # output settings
-            'outFileName': os.path.basename(inFileName).replace(".root", f"_v{args.version}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}.h5"),
-            'Version': args.version,
+            'outDir': args.outDir,
+            'tag': tag,
             # jet settings
             'minJetPt': args.minJetPt,
             'maxNjets': args.maxNjets,
             'MinNjets': args.minNjets,
             'shuffleJets': args.shuffleJets,
             # matching settings
+            'do_matching' : do_matching,
             'MatchingCriteria': args.matchingCriteria,
             'useFSRs': not args.doNotUseFSRs,
             'dRcut': 0.4,
@@ -188,14 +205,6 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
 
 def process_files(settings):
 
-    # user settings
-    sample = "Signal"
-    if "dijet" in settings["inFileName"]:
-        sample = "Dijet"
-    elif "data" in settings["inFileName"]:
-        sample = "Data"
-    do_matching = sample == 'Signal'
-
     # Set structure of output H5 file
     Structure = {
         'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'QGTaggerBDT'],
@@ -203,10 +212,10 @@ def process_files(settings):
         'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass'],
     }
 
-    if do_matching:
+    if settings['do_matching']:
 
         # update output file name
-        settings["outFileName"] = settings["outFileName"].replace(".h5",f"_{settings['MatchingCriteria']}.h5")
+        settings["tag"] += f"_{settings['MatchingCriteria']}.h5"
 
         # Collect info to know matching efficiency for each quark flavour
         quark_flavours = [1, 2, 3, 4, 5, 6]
@@ -263,14 +272,14 @@ def process_files(settings):
                 jet = RPVJet()
                 jet.SetPtEtaPhiE(tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
                 jet.set_qgtagger_bdt(tree.jet_QGTagger_bdt[ijet])
-                if do_matching and settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
+                if settings['do_matching'] and settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
                     jet.set_matched_parton_barcode(int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
                     jet.set_matched_fsr_barcode(int(tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]))
                 AllPassJets.append(jet)
         # select leading n jets with n == min(maxNjets, njets)
         SelectedJets = [AllPassJets[i] for i in range(min(settings['maxNjets'], len(AllPassJets)))]
         nJets = len(SelectedJets)
-        if do_matching:
+        if settings['do_matching']:
             nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus("truth_QuarkFromGluino_pt") else 0
             nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus("truth_FSRFromGluinoQuark_pt") else 0
 
@@ -278,7 +287,7 @@ def process_files(settings):
         passEventSelection = True
         if nJets < settings['MinNjets']:
             passEventSelection = False
-        if do_matching and nQuarksFromGs != 6:
+        if settings['do_matching'] and nQuarksFromGs != 6:
             passEventSelection = False
         if not passEventSelection:
             continue  # skip event
@@ -295,7 +304,7 @@ def process_files(settings):
             random.shuffle(SelectedJets)
 
         # Extract gluino mass
-        if sample == 'Signal':
+        if settings['sample'] == 'Signal':
             for ipart in range(len(tree.truth_parent_m)):  # loop over truth particles
                 if tree.truth_parent_pdgId[ipart] == 1000021:  # it's a gluino
                     gmass = tree.truth_parent_m[ipart]
@@ -346,12 +355,12 @@ def process_files(settings):
         Assigments['EventVars']['HT'] = ht
         Assigments['EventVars']['deta'] = SelectedJets[0].Eta() - SelectedJets[1].Eta()
         Assigments['EventVars']['djmass'] = (SelectedJets[0]+SelectedJets[1]).M()
-        if sample == 'Signal':
+        if settings['sample'] == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
         Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
         Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
 
-        if do_matching:
+        if settings['do_matching']:
 
             # Collect gluino barcodes
             gBarcodes = {'g1': 0, 'g2': 0}  # fill temporary values
@@ -472,23 +481,24 @@ def process_files(settings):
     del tree
 
     # Create H5 file
-    log.info('Creating {}...'.format(settings["outFileName"]))
-    with h5py.File(settings["outFileName"], 'w') as HF:
+    outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", f"_{settings['tag']}.h5"))
+    log.info('Creating {}...'.format(outFileName))
+    with h5py.File(outFileName, 'w') as HF:
         Groups, Datasets = dict(), dict()
         for key in Structure:
             Groups[key] = HF.create_group(key)
             for case in Structure[key]:
                 Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=assigments_list[key][case])
 
-    if do_matching:
+    if settings['do_matching']:
 
         # Save histogram
-        outFile = ROOT.TFile(f"GluinoMassDiff_{settings['MatchingCriteria']}_{settings['Version']}.root", 'RECREATE')
+        outFile = ROOT.TFile(os.path.join(settings["outDir"], f"GluinoMassDiff_{settings['tag']}.root"), 'RECREATE')
         hGluinoMassDiff.Write()
         outFile.Close()
 
         # Reco gluino mass distributions
-        outFile = ROOT.TFile(f"ReconstructedGluinoMasses_{settings['MatchingCriteria']}_{settings['Version']}.root", 'RECREATE')
+        outFile = ROOT.TFile(os.path.join(settings["outDir"], f"ReconstructedGluinoMasses_{settings['tag']}.root"), 'RECREATE')
         for key, hist in hRecoMasses.items():
             hist.Write()
         outFile.Close()
@@ -502,7 +512,7 @@ def process_files(settings):
                 log.info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
 
         # saving matching settings
-        with open(f"matchedEvents_{settings['MatchingCriteria']}_{settings['Version']}.root","w") as outFile:
+        with open(os.path.join(settings["outDir"], f"matchedEvents_{settings['tag']}.root"),"w") as outFile:
             for event in matchedEventNumbers:
                 outFile.write(str(event)+'\n')
 
