@@ -542,6 +542,7 @@ def combine_h5(inFileList, outFileName):
         outFileName = outFileName.replace(".h5",f"_{tags[0]}.h5")
 
     # create combined file
+    log.info(f"Combining into {outFileName}")
     with h5py.File(outFileName,"w") as HF:
         Groups, Datasets = dict(), dict()
         for key in Structure:
