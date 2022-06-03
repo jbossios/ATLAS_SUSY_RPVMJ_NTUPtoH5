@@ -524,7 +524,7 @@ def process_files(settings):
         # outFile = open('matchedEvents_{}_{}_{}_{}.txt'.format(
         #     settings['MassPoints'], settings['MatchingCriteria'], settings['Version'], '_'.join(settings['FlavourType'].split('+'))), 'w')
         outName = f"matchedEvents_{settings['MassPoints']}_{settings['MatchingCriteria']}_{settings['Version']}_{'_'.join(settings['FlavourType'].split('+'))}.root"
-        with open(outName) as outFile:
+        with open(outName,"w") as outFile:
             for event in matchedEventNumbers:
                 outFile.write(str(event)+'\n')
         # outFile.close()
