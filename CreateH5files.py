@@ -14,6 +14,8 @@ import h5py
 import os
 import numpy as np
 import random
+from multiprocessing import Pool
+from functools import partial
 random.seed(4)  # set the random seed for reproducibility
 
 # Global settings
@@ -683,15 +685,17 @@ if __name__ == '__main__':
         input_files = get_signal_files(settings)
         settings["sum_of_weights"] = get_sum_of_weights(input_files)
         log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
-        process_files(input_files, settings)
+        # process_files(input_files, settings)
+        input_files_listed = [[input_file] for input_file in input_files]
+        with Pool(args.ncpu) as p:
+            process_files_partial = partial(process_files, settings=settings)
+            p.map(process_files_partial, input_files_listed)
     elif args.sample == 'Dijets':
         args.path = PATH_DIJETS
         settings = set_settings(args)
         input_files = get_dijet_files(settings)
         settings["sum_of_weights"] = get_sum_of_weights(input_files)
         log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
-        from multiprocessing import Pool
-        from functools import partial
         input_files_listed = [[input_file] for input_file in input_files]
         with Pool(args.ncpu) as p:
             process_files_partial = partial(process_files, settings=settings)
