@@ -31,18 +31,18 @@ def main():
 
     # Read arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--inDir', required=True)
-    parser.add_argument('-v', '--version', required=True)
-    parser.add_argument('--minJetPt', default=50, type=float)
-    parser.add_argument('--maxNjets', default=8, type=int, required=True)
-    parser.add_argument('--minNjets', default=6, type=int)
-    parser.add_argument('--nQuarksPerGluino', default=6, type=int)
-    parser.add_argument('--shuffleJets', action='store_true')
+    parser.add_argument('-i', '--inDir', required=True, help="Input directory of files")
+    parser.add_argument('-o', '--outDir', default='./', help="Output directory for files")
+    parser.add_argument('-v', '--version', required=True, hep="Production version")
+    parser.add_argument('-j', '--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool.")
+    parser.add_argument('--minJetPt', default=50, type=float, help="Minimum selected jet pt")
+    parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
+    parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
+    parser.add_argument('--nQuarksPerGluino', default=6, type=int, help="Number of quarks per gluino from signal model")
+    parser.add_argument('--shuffleJets', action='store_true', help="Shuffle jets before saving")
     parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority', help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
-    parser.add_argument('--doNotUseFSRs', action='store_true')
-    parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--outDir', default='./', help="Output directory for files.")
-    parser.add_argument('--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool.")
+    parser.add_argument('--doNotUseFSRs', action='store_true', help="Do not consider final state radiation (FSR) in jet-parton matching")
+    parser.add_argument('--debug', action='store_true', help="Enable debug print statemetents")
     parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files and use outDir as the filename")
     args = parser.parse_args()
 
@@ -54,7 +54,7 @@ def main():
 
     # if just combine
     if args.combine:
-        combine_h5(input_files, args.outDir) # Needs to be implemented
+        combine_h5(input_files, args.outDir)
 
     # get sum of weights
     sum_of_weights = get_sum_of_weights(input_files)
@@ -460,53 +460,68 @@ def process_files(settings):
             for case in Structure[key]:
                 assigments_list[key][case].append(Assigments[key][case])
 
-    ########################################################
-    # Create H5 file
-    ########################################################
-    log.info('Creating {}...'.format(settings["outFileName"]))
-    HF = h5py.File(settings["outFileName"], 'w')
-    Groups, Datasets = dict(), dict()
-    for key in Structure:
-        Groups[key] = HF.create_group(key)
-        for case in Structure[key]:
-            if key == 'source':
-                Datasets[key+'_'+case] = Groups[key].create_dataset(
-                    case, data=assigments_list[key][case])
-            else:
-                Datasets[key+'_'+case] = Groups[key].create_dataset(
-                    case, data=assigments_list[key][case])
-
     # Close input file
     del tree
-    HF.close()
+
+    # Create H5 file
+    log.info('Creating {}...'.format(settings["outFileName"]))
+    with h5py.File(settings["outFileName"], 'w') as HF:
+        Groups, Datasets = dict(), dict()
+        for key in Structure:
+            Groups[key] = HF.create_group(key)
+            for case in Structure[key]:
+                Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=assigments_list[key][case])
 
     if do_matching:
+
         # Save histogram
-        outName = f"GluinoMassDiff_{settings['MatchingCriteria']}_{settings['Version']}.root"
-        outFile = ROOT.TFile(outName, 'RECREATE')
+        outFile = ROOT.TFile(f"GluinoMassDiff_{settings['MatchingCriteria']}_{settings['Version']}.root", 'RECREATE')
         hGluinoMassDiff.Write()
         outFile.Close()
 
         # Reco gluino mass distributions
-        outName = f"ReconstructedGluinoMasses_{settings['MatchingCriteria']}_{settings['Version']}.root"
-        outFile = ROOT.TFile(outName, 'RECREATE')
+        outFile = ROOT.TFile(f"ReconstructedGluinoMasses_{settings['MatchingCriteria']}_{settings['Version']}.root", 'RECREATE')
         for key, hist in hRecoMasses.items():
             hist.Write()
         outFile.Close()
 
+        # print matching efficiency
         log.info(f'matching efficiency (percentage of events where 6 quarks are matched): {matchedEvents/event_counter}')
         log.info(f'Number of events where 6 quarks are matched: {matchedEvents}')
         log.info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
         for flav in quark_flavours:
             if NquarksByFlavour[flav] != 0:
                 log.info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
-        outName = f"matchedEvents_{settings['MatchingCriteria']}_{settings['Version']}.root"
-        with open(outName,"w") as outFile:
+
+        # saving matching settings
+        with open(f"matchedEvents_{settings['MatchingCriteria']}_{settings['Version']}.root","w") as outFile:
             for event in matchedEventNumbers:
                 outFile.write(str(event)+'\n')
 
     log.info('>>> ALL DONE <<<')
 
+
+def combine_h5(inFileList, outFileName):
+
+    # inherit structure from first file
+    with h5py.File(inFileList[0],"r") as f:
+        Structure = {key:list(x[key].keys()) for key in f.keys()}
+
+    # make and populate assignments_list
+    assigments_list = {key: {case: [] for case in cases} for key, cases in Structure.items()}
+    for inFile in inFileList:
+        with h5py.File(inFile,"r") as f:
+            for key in Structure:
+                for case in Structure[key]:
+                    assigments_list[key][case] += list(f[key][case])
+
+    # create combined file
+    with h5py.File(outFileName, 'w') as HF:
+        Groups, Datasets = dict(), dict()
+        for key in Structure:
+            Groups[key] = HF.create_group(key)
+            for case in Structure[key]:
+                Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=assigments_list[key][case])
 
 if __name__ == '__main__':
     main()
