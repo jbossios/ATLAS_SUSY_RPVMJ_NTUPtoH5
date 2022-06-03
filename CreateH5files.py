@@ -265,7 +265,7 @@ def process_files(settings):
             random.shuffle(SelectedJets)
 
         # Extract gluino mass
-        if settings['sample'] == 'Signal':
+        if sample == 'Signal':
             for ipart in range(len(tree.truth_parent_m)):  # loop over truth particles
                 if tree.truth_parent_pdgId[ipart] == 1000021:  # it's a gluino
                     gmass = tree.truth_parent_m[ipart]
@@ -384,7 +384,7 @@ def process_files(settings):
             SelectedJets[1].Eta()
         Assigments['EventVars']['djmass'] = (
             SelectedJets[0]+SelectedJets[1]).M()
-        if settings['sample'] == 'Signal':
+        if sample == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
         Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
         Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * \
