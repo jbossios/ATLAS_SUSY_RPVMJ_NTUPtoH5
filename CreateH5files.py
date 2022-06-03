@@ -300,46 +300,6 @@ def process_files(settings):
                     gmass = tree.truth_parent_m[ipart]
                     break
 
-        if do_matching:
-            # Collect gluino barcodes
-            gBarcodes = {'g1': 0, 'g2': 0}  # fill temporary values
-
-            # Collect quark -> gluino associations
-            qPDGIDs = {g: {'q1': 0, 'q2': 0, 'q3': 0}
-                       for g in ['g1', 'g2']}  # fill temporary values
-
-            # Select quarks from gluinos
-            QuarksFromGluinos = [RPVParton() for i in range(nQuarksFromGs)]
-            for iquark in range(nQuarksFromGs):
-                QuarksFromGluinos[iquark].SetPtEtaPhiE(tree.truth_QuarkFromGluino_pt[iquark], tree.truth_QuarkFromGluino_eta[iquark],
-                                                       tree.truth_QuarkFromGluino_phi[iquark], tree.truth_QuarkFromGluino_e[iquark])
-                QuarksFromGluinos[iquark].set_gluino_barcode(
-                    tree.truth_QuarkFromGluino_ParentBarcode[iquark])
-                QuarksFromGluinos[iquark].set_barcode(
-                    tree.truth_QuarkFromGluino_barcode[iquark])
-                QuarksFromGluinos[iquark].set_pdgid(
-                    tree.truth_QuarkFromGluino_pdgID[iquark])
-
-            # Select FSR quarks from gluinos
-            FSRsFromGluinos = [RPVParton() for i in range(nFSRsFromGs)]
-            for iFSR in range(nFSRsFromGs):
-                FSRsFromGluinos[iFSR].SetPtEtaPhiE(tree.truth_FSRFromGluinoQuark_pt[iFSR], tree.truth_FSRFromGluinoQuark_eta[iFSR],
-                                                   tree.truth_FSRFromGluinoQuark_phi[iFSR], tree.truth_FSRFromGluinoQuark_e[iFSR])
-                # Find quark which emitted this FSR and get its parentBarcode
-                for parton in QuarksFromGluinos:
-                    if parton.get_barcode() == tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR]:
-                        FSRsFromGluinos[iFSR].set_gluino_barcode(
-                            parton.get_gluino_barcode())
-                        FSRsFromGluinos[iFSR].set_pdgid(parton.get_pdgid())
-                FSRsFromGluinos[iFSR].set_barcode(
-                    tree.truth_FSRFromGluinoQuark_barcode[iFSR])
-                FSRsFromGluinos[iFSR].set_quark_barcode(
-                    tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR])
-
-            # Rename array with partons to be matched to reco jets
-            Partons = QuarksFromGluinos
-            FSRs = FSRsFromGluinos
-
         # Put place-holder values for each variable
         # set jet index for each particle q1,q2,q3 to -1 (i.e. no matching) and mask to True
         def init_value(case):
@@ -350,32 +310,6 @@ def process_files(settings):
             return 0
         Assigments = {key: {case: init_value(
             case) for case in cases} for key, cases in Structure.items()}
-
-        # Match reco jets to closest parton
-        if do_matching:
-            matcher = RPVMatcher(Jets=SelectedJets, Partons=QuarksFromGluinos)
-            if settings['useFSRs']:
-                matcher.add_fsrs(FSRsFromGluinos)
-            if settings['Debug']:
-                matcher.set_property('Debug', True)
-            matcher.set_property('MatchingCriteria',
-                                 settings['MatchingCriteria'])
-            if settings['MatchingCriteria'] != "UseFTDeltaRvalues":
-                matcher.set_property('DeltaRcut', settings['dRcut'])
-            matched_jets = matcher.match()
-
-            # Fill Assigments (info for matched jets)
-            for jet_index, jet in enumerate(matched_jets):
-                if jet.is_matched():
-                    Assigments = make_assigments(Assigments, gBarcodes, jet.get_match_gluino_barcode(
-                    ), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index)
-
-            # Check if fully matched
-            n_matched_jets = sum(
-                [1 if jet.is_matched() else 0 for jet in matched_jets])
-            if n_matched_jets == 6:
-                matchedEventNumbers.append(tree.eventNumber)
-                matchedEvents += 1
 
         # Create arrays with jet info (extend Assigments with jet reco info)
         ht_calculated = False
@@ -419,8 +353,74 @@ def process_files(settings):
         Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * \
             tree.weight_filtEff * tree.weight_kFactor * \
             tree.weight_xs / settings['sum_of_weights']
-
+            
         if do_matching:
+            # Collect gluino barcodes
+            gBarcodes = {'g1': 0, 'g2': 0}  # fill temporary values
+
+            # Collect quark -> gluino associations
+            qPDGIDs = {g: {'q1': 0, 'q2': 0, 'q3': 0}
+                       for g in ['g1', 'g2']}  # fill temporary values
+
+            # Select quarks from gluinos
+            QuarksFromGluinos = [RPVParton() for i in range(nQuarksFromGs)]
+            for iquark in range(nQuarksFromGs):
+                QuarksFromGluinos[iquark].SetPtEtaPhiE(tree.truth_QuarkFromGluino_pt[iquark], tree.truth_QuarkFromGluino_eta[iquark],
+                                                       tree.truth_QuarkFromGluino_phi[iquark], tree.truth_QuarkFromGluino_e[iquark])
+                QuarksFromGluinos[iquark].set_gluino_barcode(
+                    tree.truth_QuarkFromGluino_ParentBarcode[iquark])
+                QuarksFromGluinos[iquark].set_barcode(
+                    tree.truth_QuarkFromGluino_barcode[iquark])
+                QuarksFromGluinos[iquark].set_pdgid(
+                    tree.truth_QuarkFromGluino_pdgID[iquark])
+
+            # Select FSR quarks from gluinos
+            FSRsFromGluinos = [RPVParton() for i in range(nFSRsFromGs)]
+            for iFSR in range(nFSRsFromGs):
+                FSRsFromGluinos[iFSR].SetPtEtaPhiE(tree.truth_FSRFromGluinoQuark_pt[iFSR], tree.truth_FSRFromGluinoQuark_eta[iFSR],
+                                                   tree.truth_FSRFromGluinoQuark_phi[iFSR], tree.truth_FSRFromGluinoQuark_e[iFSR])
+                # Find quark which emitted this FSR and get its parentBarcode
+                for parton in QuarksFromGluinos:
+                    if parton.get_barcode() == tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR]:
+                        FSRsFromGluinos[iFSR].set_gluino_barcode(
+                            parton.get_gluino_barcode())
+                        FSRsFromGluinos[iFSR].set_pdgid(parton.get_pdgid())
+                FSRsFromGluinos[iFSR].set_barcode(
+                    tree.truth_FSRFromGluinoQuark_barcode[iFSR])
+                FSRsFromGluinos[iFSR].set_quark_barcode(
+                    tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR])
+
+            # Rename array with partons to be matched to reco jets
+            Partons = QuarksFromGluinos
+            FSRs = FSRsFromGluinos
+
+            # Match reco jets to closest parton
+        # if do_matching:
+            matcher = RPVMatcher(Jets=SelectedJets, Partons=QuarksFromGluinos)
+            if settings['useFSRs']:
+                matcher.add_fsrs(FSRsFromGluinos)
+            if settings['Debug']:
+                matcher.set_property('Debug', True)
+            matcher.set_property('MatchingCriteria',
+                                 settings['MatchingCriteria'])
+            if settings['MatchingCriteria'] != "UseFTDeltaRvalues":
+                matcher.set_property('DeltaRcut', settings['dRcut'])
+            matched_jets = matcher.match()
+
+            # Fill Assigments (info for matched jets)
+            for jet_index, jet in enumerate(matched_jets):
+                if jet.is_matched():
+                    Assigments = make_assigments(Assigments, gBarcodes, jet.get_match_gluino_barcode(
+                    ), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index)
+
+            # Check if fully matched
+            n_matched_jets = sum(
+                [1 if jet.is_matched() else 0 for jet in matched_jets])
+            if n_matched_jets == 6:
+                matchedEventNumbers.append(tree.eventNumber)
+                matchedEvents += 1
+
+        # if do_matching:
             # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
             for g in ['g1', 'g2']:
                 TempMask = True
