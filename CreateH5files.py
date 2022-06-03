@@ -73,7 +73,7 @@ def main():
             'inFileName': inFileName,
             'sum_of_weights': sum_of_weights[dsid],
             # output settings
-            'outFileName': os.path.basename(settings["inFileName"]).replace(".root", ".h5"),
+            'outFileName': os.path.basename(inFileName).replace(".root", ".h5"),
             'Version': args.version,
             # jet settings
             'minJetPt': args.minJetPt,
