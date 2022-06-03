@@ -525,11 +525,21 @@ def combine_h5(inFileList, outFileName):
 
     # make and populate assignments_list
     assigments_list = {key: {case: [] for case in cases} for key, cases in Structure.items()}
+    tags = []
     for inFile in inFileList:
+        tags.append(inFile.split("trees_")[-1].strip(".h5"))
         with h5py.File(inFile,"r") as f:
             for key in Structure:
                 for case in Structure[key]:
                     assigments_list[key][case] += list(f[key][case])
+    
+    # check the tag and update output name
+    tags = list(set(tags))
+    if len(tags) > 1:
+        log.error(f"You are combining files with more than one tag: {tags}")
+        return
+    else:
+        outFileName = outFileName.replace(".h5",f"_{tags[0]}.h5")
 
     # create combined file
     with h5py.File(outFileName,"w") as HF:
