@@ -382,14 +382,16 @@ def process_files(input_files, settings):
     ########################################################
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
-    if sample == 'Signal':
-        outFileName = os.path.join(outDir, 'Signal_{}_{}_full_{}.h5'.format(
-            MassPoints, '_'.join(FlavourType.split('+')), Version))
-    else:  # Dijets
-        input_file_name = input_files[0].split('/')[-1]
-        input_file_name = input_file_name.replace('.trees.root', '')
-        outFileName = os.path.join(
-            outDir, 'Dijets_{}_{}.h5'.format(Version, input_file_name))
+    # if sample == 'Signal':
+    #     outFileName = os.path.join(outDir, 'Signal_{}_{}_full_{}.h5'.format(
+    #         MassPoints, '_'.join(FlavourType.split('+')), Version))
+    # else:  # Dijets
+    #     input_file_name = input_files[0].split('/')[-1]
+    #     input_file_name = input_file_name.replace('.trees.root', '')
+    #     outFileName = os.path.join(
+    #         outDir, 'Dijets_{}_{}.h5'.format(Version, input_file_name))
+    
+    outFileName = os.path.basename(input_files[0]).replace(".root",".h5")
     log.info('Creating {}...'.format(outFileName))
     HF = h5py.File(outFileName, 'w')
     Groups, Datasets = dict(), dict()
@@ -687,6 +689,8 @@ if __name__ == '__main__':
         log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
         # process_files(input_files, settings)
         input_files_listed = [[input_file] for input_file in input_files]
+        print(input_files_listed)
+        print(settings)
         with Pool(args.ncpu) as p:
             process_files_partial = partial(process_files, settings=settings)
             p.map(process_files_partial, input_files_listed)
