@@ -71,24 +71,25 @@ def main():
         
         # understand file type
         sample = "Signal"
-        if "dijet" in settings["inFileName"]:
+        if "dijet" in inFileName:
             sample = "Dijet"
-        elif "data" in settings["inFileName"]:
+        elif "data" in inFileName:
             sample = "Data"
         do_matching = sample == 'Signal'
         dsid = int(inFileName.split('user.')[1].split('.')[2])
 
         # create outfile tag
-        tag = f"v{args.version}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}"
+        tag = f"minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}"
         if do_matching:
             criteriaTag = {'UseFTDeltaRvalues':'FTDR', 'RecomputeDeltaRvalues_ptPriority': 'RDR_pt', 'RecomputeDeltaRvalues_drPriority' : 'RDR_dr'}
             tag += f"_{criteriaTag[args.matchingCriteria]}"
+        tag += f"_v{args.version}"
 
         confs.append({
             # input settings
             'inFileName': inFileName,
             'sum_of_weights': sum_of_weights[dsid],
-            'sample' : sample
+            'sample' : sample,
             # output settings
             'outDir': args.outDir,
             'tag': tag,
@@ -213,9 +214,6 @@ def process_files(settings):
     }
 
     if settings['do_matching']:
-
-        # update output file name
-        settings["tag"] += f"_{settings['MatchingCriteria']}.h5"
 
         # Collect info to know matching efficiency for each quark flavour
         quark_flavours = [1, 2, 3, 4, 5, 6]
