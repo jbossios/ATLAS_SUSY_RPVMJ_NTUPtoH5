@@ -73,7 +73,7 @@ def main():
             'inFileName': inFileName,
             'sum_of_weights': sum_of_weights[dsid],
             # output settings
-            'outFileName': os.path.basename(inFileName).replace(".root", ".h5"),
+            'outFileName': os.path.basename(inFileName).replace(".root", f"v{args.version}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}.h5"),
             'Version': args.version,
             # jet settings
             'minJetPt': args.minJetPt,
@@ -200,6 +200,9 @@ def process_files(settings):
 
     if do_matching:
 
+        # update output file name
+        settings["outFileName"] = settings["outFileName"].replace(".h5",f"_{settings['MatchingCriteria']}.h5")
+        
         # Collect info to know matching efficiency for each quark flavour
         quark_flavours = [1, 2, 3, 4, 5, 6]
         NquarksByFlavour = {flav: 0 for flav in quark_flavours}
