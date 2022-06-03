@@ -526,7 +526,8 @@ def combine_h5(inFileList, outFileName):
     # make and populate assignments_list
     assigments_list = {key: {case: [] for case in cases} for key, cases in Structure.items()}
     tags = []
-    for inFile in inFileList:
+    for iF, inFile in enumerate(inFileList):
+        log.info(f"File {iF}/{len(inFileList)}")
         tags.append(inFile.split("trees_")[-1].strip(".h5"))
         with h5py.File(inFile,"r") as f:
             for key in Structure:
