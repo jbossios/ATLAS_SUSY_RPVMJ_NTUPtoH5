@@ -513,7 +513,7 @@ def process_files(settings):
             if NquarksByFlavour[flav] != 0:
                 settings["log"].info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
         outName = f"matchedEvents_{settings['MassPoints']}_{settings['MatchingCriteria']}_{settings['Version']}_{'_'.join(settings['FlavourType'].split('+'))}.root"
-        with open(outName) as outFile:
+        with open(outName,"w") as outFile:
             for event in matchedEventNumbers:
                 outFile.write(str(event)+'\n')
 
