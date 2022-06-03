@@ -73,7 +73,7 @@ def main():
             'inFileName': inFileName,
             'sum_of_weights': sum_of_weights[dsid],
             # output settings
-            'outFileName': os.path.basename(inFileName).replace(".root", f"v{args.version}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}.h5"),
+            'outFileName': os.path.basename(inFileName).replace(".root", f"_v{args.version}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}.h5"),
             'Version': args.version,
             # jet settings
             'minJetPt': args.minJetPt,
