@@ -174,8 +174,7 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
                     assigments['g1'][q_flavour] = jet_index
                     assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
         else:
-            q_pdgid_dict, q_flavour = get_quark_flavour(
-                pdgid, 'g2', q_pdgid_dict)
+            q_pdgid_dict, q_flavour = get_quark_flavour(pdgid, 'g2', q_pdgid_dict)
             if assigments['g2'][q_flavour] == -1:  # not assigned yet
                 assigments['g2'][q_flavour] = jet_index
                 assigments['g2'][q_flavour.replace('q', 'f')] = pdgid
@@ -219,7 +218,6 @@ def process_files(settings):
         Structure['g2'] = ['mask', 'q1', 'q2', 'q3', 'f1', 'f2', 'f3']
         Structure['EventVars'].append('gmass')
 
-        # Book histograms
         # Reconstructed mass by truth mass
         Masses = [100, 200, 300, 400] + [900 + i*100 for i in range(0, 17)]
         hRecoMasses = {mass: ROOT.TH1D(f'RecoMass_TruthMass{mass}', '', 300, 0, 3000) for mass in Masses}
@@ -343,18 +341,15 @@ def process_files(settings):
 
         # Save event-level variables
         Assigments['EventVars']['HT'] = ht
-        Assigments['EventVars']['deta'] = SelectedJets[0].Eta() - \
-            SelectedJets[1].Eta()
-        Assigments['EventVars']['djmass'] = (
-            SelectedJets[0]+SelectedJets[1]).M()
+        Assigments['EventVars']['deta'] = SelectedJets[0].Eta() - SelectedJets[1].Eta()
+        Assigments['EventVars']['djmass'] = (SelectedJets[0]+SelectedJets[1]).M()
         if sample == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
         Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
-        Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * \
-            tree.weight_filtEff * tree.weight_kFactor * \
-            tree.weight_xs / settings['sum_of_weights']
-            
+        Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
+
         if do_matching:
+
             # Collect gluino barcodes
             gBarcodes = {'g1': 0, 'g2': 0}  # fill temporary values
 
@@ -395,7 +390,6 @@ def process_files(settings):
             FSRs = FSRsFromGluinos
 
             # Match reco jets to closest parton
-        # if do_matching:
             matcher = RPVMatcher(Jets=SelectedJets, Partons=QuarksFromGluinos)
             if settings['useFSRs']:
                 matcher.add_fsrs(FSRsFromGluinos)
@@ -420,7 +414,6 @@ def process_files(settings):
                 matchedEventNumbers.append(tree.eventNumber)
                 matchedEvents += 1
 
-        # if do_matching:
             # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
             for g in ['g1', 'g2']:
                 TempMask = True
