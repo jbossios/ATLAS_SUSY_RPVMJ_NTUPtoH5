@@ -33,7 +33,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--inDir', required=True, help="Input directory of files")
     parser.add_argument('-o', '--outDir', default='./', help="Output directory for files")
-    parser.add_argument('-v', '--version', required=True, hep="Production version")
+    parser.add_argument('-v', '--version', required=True, help="Production version")
     parser.add_argument('-j', '--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool.")
     parser.add_argument('--minJetPt', default=50, type=float, help="Minimum selected jet pt")
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
@@ -54,7 +54,7 @@ def main():
 
     # if just combine
     if args.combine:
-        combine_h5(input_files, args.outDir)
+        return combine_h5(input_files, args.outDir)
 
     # get sum of weights
     sum_of_weights = get_sum_of_weights(input_files)
@@ -505,7 +505,7 @@ def combine_h5(inFileList, outFileName):
 
     # inherit structure from first file
     with h5py.File(inFileList[0],"r") as f:
-        Structure = {key:list(x[key].keys()) for key in f.keys()}
+        Structure = {key:list(f[key].keys()) for key in f.keys()}
 
     # make and populate assignments_list
     assigments_list = {key: {case: [] for case in cases} for key, cases in Structure.items()}
@@ -516,7 +516,7 @@ def combine_h5(inFileList, outFileName):
                     assigments_list[key][case] += list(f[key][case])
 
     # create combined file
-    with h5py.File(outFileName, 'w') as HF:
+    with h5py.File(outFileName,"w") as HF:
         Groups, Datasets = dict(), dict()
         for key in Structure:
             Groups[key] = HF.create_group(key)
