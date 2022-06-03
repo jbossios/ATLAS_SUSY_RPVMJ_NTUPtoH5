@@ -23,7 +23,82 @@ from glob import glob
 import argparse
 random.seed(4)  # set the random seed for reproducibility
 
-# custom code
+
+def main():
+
+    # Read arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--inDir', required=True)
+    parser.add_argument('-v', '--version', required=True)
+    parser.add_argument('--minJetPt', default=50, type=float)
+    parser.add_argument('--maxNjets', default=8, type=int, required=True)
+    parser.add_argument('--minNjets', default=6, type=int)
+    parser.add_argument('--nQuarksPerGluino', default=6, type=int)
+    parser.add_argument('--shuffleJets', action='store_true')
+    parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority',
+                        help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
+    parser.add_argument('--doNotUseFSRs', action='store_true')
+    parser.add_argument('--masses', default='1400',
+                        help="Choose set of masses from: All, AllExceptX (with X any mass), X (with X any mass), Low, Intermediate, IntermediateWo1400, High")
+    parser.add_argument('--flavour', default='UDB+UDS',
+                        help='UDB+UDS, or UDB, or UDS, or All (ALL+UDB+UDS)')
+    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--outDir', default='./',
+                        help="Output directory for files.")
+    parser.add_argument('--ncpu', default=1, type=int,
+                        help="Number of cores to use in multiprocessing pool.")
+    args = parser.parse_args()
+
+    logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
+    log = logging.getLogger('CreateH4Files')
+    if args.debug:
+        log.setLevel("DEBUG")
+
+    # get input files and sum of weights
+    input_files = handleInput(args.inDir)
+    sum_of_weights = get_sum_of_weights(input_files)
+    log.info('Sum of weights: {}'.format(sum_of_weights))
+
+    # prepare outdir
+    if not os.path.isdir(args.outDir):
+        os.makedirs(args.outDir)
+
+    # make job configurations
+    confs = []
+    for inFileName in input_files:
+        dsid = int(inFileName.split('user.')[1].split('.')[2])
+        outFileName = os.path.basename(inFileName).replace(
+            ".root", ".h5")  # include version, ptcut, max jets, etc in name
+        confs.append({
+            # input settings
+            'inFileName': inFileName,
+            'sum_of_weights': sum_of_weights[dsid],
+            'FlavourType': args.flavour,
+            'MassPoints': args.masses,
+            # output settings
+            'outFileName': outFileName,
+            'Version': args.version,
+            # jet settings
+            'minJetPt': args.minJetPt,
+            'maxNjets': args.maxNjets,
+            'MinNjets': args.minNjets,
+            'shuffleJets': args.shuffleJets,
+            # matching settings
+            'MatchingCriteria': args.matchingCriteria,
+            'useFSRs': not args.doNotUseFSRs,
+            'dRcut': 0.4,
+            # global settings
+            'Debug': args.debug,
+            'Logger': log,
+        })
+
+    # launch jobs
+    if args.ncpu == 1:
+        for conf in confs:
+            process_files(conf)
+    else:
+        results = mp.Pool(args.ncpu).map(process_files, confs)
+
 
 def get_quark_flavour(pdgid, g, dictionary):
     """ Function that assigns quarks to q1, q2 or q3 """
@@ -76,27 +151,13 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
 
 def process_files(settings):
 
-    # User settings
-    # input_file = settings["input_file"]
-    Version = settings['Version']
-    # MinNjets = settings['MinNjets']
-    # maxNjets = settings['maxNjets']
-    # minJetPt = settings['minJetPt']
-    # shuffleJets = settings['shuffleJets']
-    # Debug = settings['Debug']
-    # sample = settings['sample']
-    # log = settings['Logger']
-    # outDir = settings['outDir']
-    # sum_of_weights = settings['sum_of_weights']
-    do_matching = settings['sample'] == 'Signal'
-
-    # if settings['sample'] == 'Signal':
-        # MatchingCriteria = settings['MatchingCriteria']
-        # dRcut = settings['dRcut']
-        # useFSRs = settings['useFSRs']
-        # MassPoints = settings['MassPoints']
-        # FlavourType = settings['FlavourType']
-        # do_matching = True
+    # user settings
+    sample = "Signal"
+    if "dijet" in settings["inFileName"]:
+        sample = "Dijet"
+    elif "data" in settings["inFileName"]:
+        sample = "Data"
+    do_matching = sample == 'Signal'
 
     # Create TChain using all input ROOT files
     tree = ROOT.TChain("trees_SRRPV_")
@@ -147,7 +208,8 @@ def process_files(settings):
     settings['Logger'].info('About to enter event loop')
     event_counter = 0
     for counter, event in enumerate(tree):
-        settings['Logger'].debug('Processing eventNumber = {}'.format(tree.eventNumber))
+        settings['Logger'].debug(
+            'Processing eventNumber = {}'.format(tree.eventNumber))
 
         # Skip events with any number of electrons/muons
         # if tree.nBaselineElectrons or tree.nBaselineMuons:  # Temporary (uncomment once I have new samples)
@@ -267,7 +329,10 @@ def process_files(settings):
                 matcher.add_fsrs(FSRsFromGluinos)
             if settings['Debug']:
                 matcher.set_property('Debug', True)
-            matcher.set_property('MatchingCriteria', settings['MatchingCriteria'])
+            matcher.set_property('MatchingCriteria',
+                                 settings['MatchingCriteria'])
+            if settings['MatchingCriteria'] != "UseFTDeltaRvalues":
+                matcher.set_property('DeltaRcut', settings['dRcut'])
             matched_jets = matcher.match()
 
             # Fill Assigments (info for matched jets)
@@ -401,14 +466,14 @@ def process_files(settings):
     if do_matching:
         # Save histogram
         outName = 'GluinoMassDiff_{}_{}_{}_{}.root'.format(
-            settings['MassPoints'], settings['MatchingCriteria'], Version, '_'.join(settings['FlavourType'].split('+')))
+            settings['MassPoints'], settings['MatchingCriteria'], settings['Version'], '_'.join(settings['FlavourType'].split('+')))
         outFile = ROOT.TFile(outName, 'RECREATE')
         hGluinoMassDiff.Write()
         outFile.Close()
 
         # Reco gluino mass distributions
         outName = 'ReconstructedGluinoMasses_{}_{}_{}_{}.root'.format(
-            settings['MassPoints'], settings['MatchingCriteria'], Version, '_'.join(settings['FlavourType'].split('+')))
+            settings['MassPoints'], settings['MatchingCriteria'], settings['Version'], '_'.join(settings['FlavourType'].split('+')))
         outFile = ROOT.TFile(outName, 'RECREATE')
         for key, hist in hRecoMasses.items():
             hist.Write()
@@ -426,7 +491,7 @@ def process_files(settings):
                 print('Matching efficiency for quarks w/ abs(pdgID)=={}: {}'.format(flav,
                                                                                     NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]))
         outFile = open('matchedEvents_{}_{}_{}_{}.txt'.format(
-            settings['MassPoints'], settings['MatchingCriteria'], Version, '_'.join(settings['FlavourType'].split('+'))), 'w')
+            settings['MassPoints'], settings['MatchingCriteria'], settings['Version'], '_'.join(settings['FlavourType'].split('+'))), 'w')
         for event in matchedEventNumbers:
             outFile.write(str(event)+'\n')
         outFile.close()
@@ -468,82 +533,6 @@ def get_sum_of_weights(file_list):
             sum_of_weights[dsid] += metadata_hist.GetBinContent(3)
     return sum_of_weights
 
+
 if __name__ == '__main__':
-
-    # Read arguments
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--inDir", required=True)
-    parser.add_argument('--version', '--v', action='store',
-                        dest='version', default='', required=True)
-    parser.add_argument('--sample', action='store',
-                        dest='sample', default='Signal')
-    parser.add_argument('--pTcut', action='store',
-                        dest='minJetPt', default='', required=True)
-    parser.add_argument('--maxNjets', action='store',
-                        dest='maxNjets', default='', required=True)
-    parser.add_argument('--minNjets', action='store',
-                        dest='minNjets', default='6')
-    parser.add_argument('--nQuarksPerGluino', action='store',
-                        dest='nQuarksPerGluino', default='6')
-    parser.add_argument('--shuffleJets', action='store_true',
-                        dest='shuffleJets', default=False)
-    parser.add_argument('--matchingCriteria', action='store', dest='matchingCriteria', default='RecomputeDeltaRvalues_drPriority',
-                        help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
-    parser.add_argument('--doNotUseFSRs', action='store_true',
-                        dest='doNotUseFSRs', default=False)
-    parser.add_argument('--masses', action='store', dest='masses', default='1400',
-                        help="Choose set of masses from: All, AllExceptX (with X any mass), X (with X any mass), Low, Intermediate, IntermediateWo1400, High")
-    parser.add_argument('--flavour', action='store', dest='flavour',
-                        default='UDB+UDS', help='UDB+UDS, or UDB, or UDS, or All (ALL+UDB+UDS)')
-    parser.add_argument('--debug', action='store_true',
-                        dest='debug', default=False)
-    parser.add_argument('--outDir', default='./',
-                        help="Output directory for files.")
-    parser.add_argument('--ncpu', default=1, type=int,
-                        help="Number of cores to use in multiprocessing pool.")
-    args = parser.parse_args()
-
-    logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
-    log = logging.getLogger('CreateH4Files')
-    if args.debug:
-        log.setLevel("DEBUG")
-
-    input_files = handleInput(args.inDir)
-    sum_of_weights = get_sum_of_weights(input_files)
-    log.info('Sum of weights: {}'.format(sum_of_weights))
-    
-    # prepare outdir
-    if not os.path.isdir(args.outDir):
-        os.makedirs(args.outDir)
-
-    confs = []
-    for inFileName in input_files:
-        dsid = int(inFileName.split('user.')[1].split('.')[2])
-        outFileName = os.path.basename(inFileName).replace(".root", ".h5")  # include version, ptcut, max jets, etc in name
-        confs.append({
-            'inFileName': inFileName,
-            'outFileName': outFileName,
-            'sum_of_weights': sum_of_weights[dsid],
-            'useFSRs': not args.doNotUseFSRs,
-            'Version': args.version,
-            'maxNjets': int(args.maxNjets),
-            'minJetPt': int(args.minJetPt),
-            'FlavourType': args.flavour,
-            'MassPoints': args.masses,
-            'MatchingCriteria': args.matchingCriteria,
-            'MinNjets': int(args.minNjets),
-            'shuffleJets': args.shuffleJets,
-            'Debug': args.debug,
-            'sample': args.sample,
-            # 'dRcut': 0.4, # NOT USED
-            'Logger': log,
-            
-        })
-
-    # launch jobs
-    if args.ncpu == 1:
-        for conf in confs:
-            process_files(conf)
-    else:
-        results = mp.Pool(args.ncpu).map(process_files, confs)
+    main()
