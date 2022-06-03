@@ -128,7 +128,7 @@ def process_files(input_files, settings):
     # Book histograms
     if do_matching:
         # Reconstructed mass by truth mass
-        Masses = [900 + i*100 for i in range(0, 17)]
+        Masses = [100,200,300,400] + [900 + i*100 for i in range(0, 17)]
         hRecoMasses = {mass: ROOT.TH1D(f'RecoMass_TruthMass{mass}', '', 300, 0, 3000) for mass in Masses}
 
         # Reconstructed gluino mass - true gluino mass
@@ -178,8 +178,8 @@ def process_files(input_files, settings):
                         for i in range(min(maxNjets, len(AllPassJets)))]
         nJets = len(SelectedJets)
         if do_matching:
-            nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt)
-            nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt)
+            nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus("truth_QuarkFromGluino_pt") else 0
+            nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus("truth_FSRFromGluinoQuark_pt") else 0
 
         # Apply event selections
         passEventSelection = True
