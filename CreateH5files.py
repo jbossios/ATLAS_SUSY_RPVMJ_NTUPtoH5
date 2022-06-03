@@ -35,7 +35,7 @@ def main():
     parser.add_argument('-o', '--outDir', default='./', help="Output directory for files")
     parser.add_argument('-v', '--version', required=True, help="Production version")
     parser.add_argument('-j', '--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool.")
-    parser.add_argument('--minJetPt', default=50, type=float, help="Minimum selected jet pt")
+    parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt")
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
     parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
     parser.add_argument('--nQuarksPerGluino', default=6, type=int, help="Number of quarks per gluino from signal model")
@@ -202,7 +202,7 @@ def process_files(settings):
 
         # update output file name
         settings["outFileName"] = settings["outFileName"].replace(".h5",f"_{settings['MatchingCriteria']}.h5")
-        
+
         # Collect info to know matching efficiency for each quark flavour
         quark_flavours = [1, 2, 3, 4, 5, 6]
         NquarksByFlavour = {flav: 0 for flav in quark_flavours}
