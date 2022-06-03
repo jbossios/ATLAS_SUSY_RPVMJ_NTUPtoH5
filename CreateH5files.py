@@ -21,6 +21,7 @@ import multiprocessing as mp
 from glob import glob
 import argparse
 import sys
+import json
 random.seed(4)  # set the random seed for reproducibility
 
 # global variables
@@ -87,6 +88,10 @@ def main():
             # global settings
             'Debug': args.debug
         })
+
+    # save confs to json
+    with open(os.path.join(args.outDir,'CreateH5files_confs.json'), 'w') as f:
+        json.dump(confs, f, sort_keys=False, indent=4)
 
     # launch jobs
     if args.ncpu == 1:
