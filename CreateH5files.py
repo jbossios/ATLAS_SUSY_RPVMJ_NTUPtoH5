@@ -16,6 +16,7 @@ import numpy as np
 import random
 from multiprocessing import Pool
 from functools import partial
+from glob import glob
 random.seed(4)  # set the random seed for reproducibility
 
 # Global settings
@@ -91,7 +92,7 @@ def process_files(input_files, settings):
     outDir = settings['outDir']
     sum_of_weights = settings['sum_of_weights']
     do_matching = False
-    dsid = int(input_files[0].split('user.')[1].split('.')[2])
+    # dsid = int(input_files[0].split('user.')[1].split('.')[2])
     if sample == 'Signal':
         MatchingCriteria = settings['MatchingCriteria']
         dRcut = settings['dRcut']
@@ -130,7 +131,7 @@ def process_files(input_files, settings):
     # Book histograms
     if do_matching:
         # Reconstructed mass by truth mass
-        Masses = [100,200,300,400] + [900 + i*100 for i in range(0, 17)]
+        Masses = [100, 200, 300, 400] + [900 + i*100 for i in range(0, 17)]
         hRecoMasses = {mass: ROOT.TH1D(f'RecoMass_TruthMass{mass}', '', 300, 0, 3000) for mass in Masses}
 
         # Reconstructed gluino mass - true gluino mass
@@ -180,8 +181,10 @@ def process_files(input_files, settings):
                         for i in range(min(maxNjets, len(AllPassJets)))]
         nJets = len(SelectedJets)
         if do_matching:
-            nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus("truth_QuarkFromGluino_pt") else 0
-            nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus("truth_FSRFromGluinoQuark_pt") else 0
+            nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus(
+                "truth_QuarkFromGluino_pt") else 0
+            nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus(
+                "truth_FSRFromGluinoQuark_pt") else 0
 
         # Apply event selections
         passEventSelection = True
@@ -323,7 +326,9 @@ def process_files(input_files, settings):
         if sample == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
         Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
-        Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / sum_of_weights[dsid]
+        Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * \
+            tree.weight_filtEff * tree.weight_kFactor * \
+            tree.weight_xs / sum_of_weights #[dsid]
 
         if do_matching:
             # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
@@ -390,8 +395,8 @@ def process_files(input_files, settings):
     #     input_file_name = input_file_name.replace('.trees.root', '')
     #     outFileName = os.path.join(
     #         outDir, 'Dijets_{}_{}.h5'.format(Version, input_file_name))
-    
-    outFileName = os.path.basename(input_files[0]).replace(".root",".h5")
+
+    outFileName = os.path.basename(input_files[0]).replace(".root", ".h5")
     log.info('Creating {}...'.format(outFileName))
     HF = h5py.File(outFileName, 'w')
     Groups, Datasets = dict(), dict()
@@ -544,7 +549,7 @@ def get_signal_files(settings):
     else:  # individual mass
         dsids_to_use = {dsid: sample for dsid, sample in dsids.items(
         ) if settings['MassPoints'] in sample and sample.split('_')[2] in Flavours}
-        
+
     print(dsids_to_use)
     # Prepare list of input files
     input_files = []
@@ -552,15 +557,27 @@ def get_signal_files(settings):
         if '.root' not in root_file:
             continue  # skip non-TFile files
         #dsid = root_file.replace('.root', '')
-        input_file = os.path.join(settings["PATH"],root_file)
+        input_file = os.path.join(settings["PATH"], root_file)
         dsid = input_file.split('user.')[1].split('.')[2]
         print(dsid)
         print(input_file)
         if dsid not in dsids_to_use:
             continue  # skip undesired DSID
-        #input_file = f'{settings["PATH"]}{root_file}'
+        # input_file = f'{settings["PATH"]}{root_file}'
         input_files.append(input_file)
     return input_files
+
+
+def handleInput(data):
+    elif os.path.isfile(data) and ".root" in os.path.basename(data):
+        return [data]
+    elif os.path.isfile(data) and ".txt" in os.path.basename(data):
+        return sorted([line.strip() for line in open(data, "r")])
+    elif os.path.isdir(data):
+        return [os.path.join(data, i) for i in sorted(os.listdir(data))]
+    elif "*" in data:
+        return sorted(glob(data))
+    return []
 
 
 def get_sum_of_weights(file_list):
@@ -629,12 +646,13 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--version', '--v', action='store',
-                        dest='version', default='')
+                        dest='version', default='', required=True)
     parser.add_argument('--sample', action='store',
                         dest='sample', default='Signal')
-    parser.add_argument('--pTcut', action='store', dest='minJetPt', default='')
+    parser.add_argument('--pTcut', action='store',
+                        dest='minJetPt', default='', required=True)
     parser.add_argument('--maxNjets', action='store',
-                        dest='maxNjets', default='')
+                        dest='maxNjets', default='', required=True)
     parser.add_argument('--minNjets', action='store',
                         dest='minNjets', default='6')
     parser.add_argument('--nQuarksPerGluino', action='store',
@@ -658,19 +676,19 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Protections
-    import sys
-    if not args.version:
-        print('ERROR: version (--version OR -v) not provided, exiting')
-        parser.print_help()
-        sys.exit(1)
-    if not args.maxNjets:
-        print('ERROR: maxNjets (--maxNjets) not provided, exiting')
-        parser.print_help()
-        sys.exit(1)
-    if not args.minJetPt:
-        print('ERROR: minimum jet pT (--pTcut) not provided, exiting')
-        parser.print_help()
-        sys.exit(1)
+    # import sys
+    # if not args.version:
+    #     print('ERROR: version (--version OR -v) not provided, exiting')
+    #     parser.print_help()
+    #     sys.exit(1)
+    # if not args.maxNjets:
+    #     print('ERROR: maxNjets (--maxNjets) not provided, exiting')
+    #     parser.print_help()
+    #     sys.exit(1)
+    # if not args.minJetPt:
+    #     print('ERROR: minimum jet pT (--pTcut) not provided, exiting')
+    #     parser.print_help()
+    #     sys.exit(1)
 
     logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
     log = logging.getLogger('CreateH4Files')
@@ -678,31 +696,63 @@ if __name__ == '__main__':
         log.setLevel("DEBUG")
     args.logger = log
 
+    input_files = handleInput(args.inDir)
+    sum_of_weights = get_sum_of_weights(input_files)
+    log.info('Sum of weights: {}'.format(sum_of_weights))
+    confs = []
+    for file in input_files:
+        dsid = int(file.split('user.')[1].split('.')[2])
+        confs.append({
+            'useFSRs': not args.doNotUseFSRs,
+            'Version': args.version,
+            'maxNjets': int(args.maxNjets),
+            'minJetPt': int(args.minJetPt),
+            'FlavourType': args.flavour,
+            'MassPoints': args.masses,
+            'MatchingCriteria': args.matchingCriteria,
+            'MinNjets': int(args.minNjets),
+            'shuffleJets': args.shuffleJets,
+            'Debug': args.debug,
+            'PATH': args.path,
+            'sample': args.sample,
+            'dRcut': 0.4,
+            'Logger': args.logger,
+            'outDir': args.outDir,
+            'sum_of_weights': sum_of_weights[dsid]
+        })
+
+    # launch jobs
+    if args.ncpu == 1:
+        for conf in confs:
+            process_files(conf)
+    else:
+        results = mp.Pool(args.ncpu).map(process_files, confs)
+
     # Find input files
     # signal: will create a TChain using all input files
     # dijets: will run on each input file separately
-    if args.sample == 'Signal':
-        args.path = PATH_SIGNALS
-        settings = set_settings(args)
-        input_files = get_signal_files(settings)
-        settings["sum_of_weights"] = get_sum_of_weights(input_files)
-        log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
-        # process_files(input_files, settings)
-        input_files_listed = [[input_file] for input_file in input_files]
-        print(input_files_listed)
-        print(settings)
-        with Pool(args.ncpu) as p:
-            process_files_partial = partial(process_files, settings=settings)
-            p.map(process_files_partial, input_files_listed)
-    elif args.sample == 'Dijets':
-        args.path = PATH_DIJETS
-        settings = set_settings(args)
-        input_files = get_dijet_files(settings)
-        settings["sum_of_weights"] = get_sum_of_weights(input_files)
-        log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
-        input_files_listed = [[input_file] for input_file in input_files]
-        with Pool(args.ncpu) as p:
-            process_files_partial = partial(process_files, settings=settings)
-            p.map(process_files_partial, input_files_listed)
-    else:
-        print('ERROR: sample=={settings["sample"]} not supported yet')
+    # if args.sample == 'Signal':
+    #     args.path = PATH_SIGNALS
+    #     settings = set_settings(args)
+    #     input_files = get_signal_files(settings)
+    #     settings["sum_of_weights"] = get_sum_of_weights(input_files)
+    #     log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
+    #     # process_files(input_files, settings)
+    #     input_files_listed = [[input_file] for input_file in input_files]
+    #     print(input_files_listed)
+    #     print(settings)
+    #     with Pool(args.ncpu) as p:
+    #         process_files_partial = partial(process_files, settings=settings)
+    #         p.map(process_files_partial, input_files_listed)
+    # elif args.sample == 'Dijets':
+    #     args.path = PATH_DIJETS
+    #     settings = set_settings(args)
+    #     input_files = get_dijet_files(settings)
+    #     settings["sum_of_weights"] = get_sum_of_weights(input_files)
+    #     log.info('Sum of weights: {}'.format(settings["sum_of_weights"]))
+    #     input_files_listed = [[input_file] for input_file in input_files]
+    #     with Pool(args.ncpu) as p:
+    #         process_files_partial = partial(process_files, settings=settings)
+    #         p.map(process_files_partial, input_files_listed)
+    # else:
+    #     print('ERROR: sample=={settings["sample"]} not supported yet')
