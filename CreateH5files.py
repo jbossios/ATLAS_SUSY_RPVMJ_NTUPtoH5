@@ -67,8 +67,7 @@ def main():
     confs = []
     for inFileName in input_files:
         dsid = int(inFileName.split('user.')[1].split('.')[2])
-        outFileName = os.path.basename(inFileName).replace(
-            ".root", ".h5")  # include version, ptcut, max jets, etc in name
+        outFileName = os.path.basename(inFileName).replace(".root", ".h5")
         confs.append({
             # input settings
             'inFileName': inFileName,
@@ -89,7 +88,7 @@ def main():
             'dRcut': 0.4,
             # global settings
             'Debug': args.debug,
-            'Logger': log,
+            'log': log,
         })
 
     # launch jobs
@@ -98,6 +97,43 @@ def main():
             process_files(conf)
     else:
         results = mp.Pool(args.ncpu).map(process_files, confs)
+
+
+def handleInput(data):
+    if os.path.isfile(data) and ".root" in os.path.basename(data):
+        return [data]
+    elif os.path.isfile(data) and ".txt" in os.path.basename(data):
+        return sorted([line.strip() for line in open(data, "r")])
+    elif os.path.isdir(data):
+        return [os.path.join(data, i) for i in sorted(os.listdir(data))]
+    elif "*" in data:
+        return sorted(glob(data))
+    return []
+
+
+def get_sum_of_weights(file_list):
+    # Get sum of weights from all input files (by DSID)
+    sum_of_weights = {}  # sum of weights for each dsid
+    for file_name in file_list:
+        # Make sure it's a ROOT file
+        if not file_name.endswith('.root'):
+            continue
+        # Get metadata from all files, even those w/ empty TTrees
+        try:
+            tfile = ROOT.TFile.Open(file_name)
+        except OSError:
+            raise OSError('{} can not be opened'.format(file_name))
+        # Identify DSID for this file
+        dsid = int(file_name.split('user.')[1].split('.')[2])
+        # Get sum of weights from metadata
+        metadata_hist = tfile.Get('MetaData_EventCount')
+        if dsid not in sum_of_weights:
+            # initial sum of weights
+            sum_of_weights[dsid] = metadata_hist.GetBinContent(3)
+        else:
+            # initial sum of weights
+            sum_of_weights[dsid] += metadata_hist.GetBinContent(3)
+    return sum_of_weights
 
 
 def get_quark_flavour(pdgid, g, dictionary):
@@ -205,10 +241,10 @@ def process_files(settings):
     # Loop over events and fill the numpy arrays on each event
     ##############################################################################################
 
-    settings['Logger'].info('About to enter event loop')
+    settings["log"].info('About to enter event loop')
     event_counter = 0
     for counter, event in enumerate(tree):
-        settings['Logger'].debug(
+        settings["log"].debug(
             'Processing eventNumber = {}'.format(tree.eventNumber))
 
         # Skip events with any number of electrons/muons
@@ -257,7 +293,7 @@ def process_files(settings):
 
         # Protection
         if nJets > settings['maxNjets']:
-            settings['Logger'].fatal(f'More than {settings["maxNjets"]} jets were found ({nJets}), fix me!')
+            settings["log"].fatal(f'More than {settings["maxNjets"]} jets were found ({nJets}), fix me!')
             sys.exit(1)
 
         # Remove pt ordering in the jet array (if requested)
@@ -446,7 +482,7 @@ def process_files(settings):
     ########################################################
     # Create H5 file
     ########################################################
-    settings['Logger'].info('Creating {}...'.format(settings["outFileName"]))
+    settings["log"].info('Creating {}...'.format(settings["outFileName"]))
     HF = h5py.File(settings["outFileName"], 'w')
     Groups, Datasets = dict(), dict()
     for key in Structure:
@@ -465,73 +501,33 @@ def process_files(settings):
 
     if do_matching:
         # Save histogram
-        outName = 'GluinoMassDiff_{}_{}_{}_{}.root'.format(
-            settings['MassPoints'], settings['MatchingCriteria'], settings['Version'], '_'.join(settings['FlavourType'].split('+')))
+        outName = f"GluinoMassDiff_{settings['MassPoints']}_{settings['MatchingCriteria']}_{settings['Version']}_{'_'.join(settings['FlavourType'].split('+'))}.root"
         outFile = ROOT.TFile(outName, 'RECREATE')
         hGluinoMassDiff.Write()
         outFile.Close()
 
         # Reco gluino mass distributions
-        outName = 'ReconstructedGluinoMasses_{}_{}_{}_{}.root'.format(
-            settings['MassPoints'], settings['MatchingCriteria'], settings['Version'], '_'.join(settings['FlavourType'].split('+')))
+        outName = f"ReconstructedGluinoMasses_{settings['MassPoints']}_{settings['MatchingCriteria']}_{settings['Version']}_{'_'.join(settings['FlavourType'].split('+'))}.root"
         outFile = ROOT.TFile(outName, 'RECREATE')
         for key, hist in hRecoMasses.items():
             hist.Write()
         outFile.Close()
 
-    settings['Logger'].info('>>> ALL DONE <<<')
+    settings["log"].info('>>> ALL DONE <<<')
     if do_matching:
-        print('matching efficiency (percentage of events where 6 quarks are matched): {}'.format(
-            matchedEvents/event_counter))
-        print('Number of events where 6 quarks are matched: {}'.format(matchedEvents))
-        print('percentage of events having a quark matching several jets: {}'.format(
-            multipleQuarkMatchingEvents/event_counter))
+        settings["log"].info(f'matching efficiency (percentage of events where 6 quarks are matched): {matchedEvents/event_counter}')
+        settings["log"].info(f'Number of events where 6 quarks are matched: {matchedEvents}')
+        settings["log"].info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
         for flav in quark_flavours:
             if NquarksByFlavour[flav] != 0:
-                print('Matching efficiency for quarks w/ abs(pdgID)=={}: {}'.format(flav,
-                                                                                    NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]))
-        outFile = open('matchedEvents_{}_{}_{}_{}.txt'.format(
-            settings['MassPoints'], settings['MatchingCriteria'], settings['Version'], '_'.join(settings['FlavourType'].split('+'))), 'w')
-        for event in matchedEventNumbers:
-            outFile.write(str(event)+'\n')
-        outFile.close()
-
-
-def handleInput(data):
-    if os.path.isfile(data) and ".root" in os.path.basename(data):
-        return [data]
-    elif os.path.isfile(data) and ".txt" in os.path.basename(data):
-        return sorted([line.strip() for line in open(data, "r")])
-    elif os.path.isdir(data):
-        return [os.path.join(data, i) for i in sorted(os.listdir(data))]
-    elif "*" in data:
-        return sorted(glob(data))
-    return []
-
-
-def get_sum_of_weights(file_list):
-    # Get sum of weights from all input files (by DSID)
-    sum_of_weights = {}  # sum of weights for each dsid
-    for file_name in file_list:
-        # Make sure it's a ROOT file
-        if not file_name.endswith('.root'):
-            continue
-        # Get metadata from all files, even those w/ empty TTrees
-        try:
-            tfile = ROOT.TFile.Open(file_name)
-        except OSError:
-            raise OSError('{} can not be opened'.format(file_name))
-        # Identify DSID for this file
-        dsid = int(file_name.split('user.')[1].split('.')[2])
-        # Get sum of weights from metadata
-        metadata_hist = tfile.Get('MetaData_EventCount')
-        if dsid not in sum_of_weights:
-            sum_of_weights[dsid] = metadata_hist.GetBinContent(
-                3)  # initial sum of weights
-        else:
-            # initial sum of weights
-            sum_of_weights[dsid] += metadata_hist.GetBinContent(3)
-    return sum_of_weights
+                settings["log"].info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
+        # outFile = open('matchedEvents_{}_{}_{}_{}.txt'.format(
+        #     settings['MassPoints'], settings['MatchingCriteria'], settings['Version'], '_'.join(settings['FlavourType'].split('+'))), 'w')
+        outName = f"matchedEvents_{settings['MassPoints']}_{settings['MatchingCriteria']}_{settings['Version']}_{'_'.join(settings['FlavourType'].split('+'))}.root"
+        with open(outName) as outFile:
+            for event in matchedEventNumbers:
+                outFile.write(str(event)+'\n')
+        # outFile.close()
 
 
 if __name__ == '__main__':
