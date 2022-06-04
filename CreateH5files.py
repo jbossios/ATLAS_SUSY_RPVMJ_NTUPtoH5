@@ -526,13 +526,17 @@ def combine_h5(inFileList, outFileName):
     # make and populate assignments_list
     assigments_list = {key: {case: [] for case in cases} for key, cases in Structure.items()}
     tags = []
-    for inFile in inFileList:
+    for iF, inFile in enumerate(inFileList):
+        log.info(f"File {iF}/{len(inFileList)}")
         tags.append(inFile.split("trees_")[-1].strip(".h5"))
         with h5py.File(inFile,"r") as f:
             for key in Structure:
                 for case in Structure[key]:
-                    assigments_list[key][case] += list(f[key][case])
-    
+                    if len(f[key][case]):
+                        assigments_list[key][case].append(np.array(f[key][case]))
+                    else:
+                        print(f"{inFile} has zero entries in {case}")
+
     # check the tag and update output name
     tags = list(set(tags))
     if len(tags) > 1:
@@ -548,7 +552,7 @@ def combine_h5(inFileList, outFileName):
         for key in Structure:
             Groups[key] = HF.create_group(key)
             for case in Structure[key]:
-                Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=assigments_list[key][case])
+                Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=np.concatenate(assigments_list[key][case]))
 
 if __name__ == '__main__':
     main()
