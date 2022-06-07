@@ -250,7 +250,7 @@ def process_files(settings):
     # Create TChain using all input ROOT files
     tree = ROOT.TChain("trees_SRRPV_")
     tree.Add(settings["inFileName"])
-    log.info('About to enter event loop')
+    log.info(f'About to enter event loop for {settings["inFileName"]}')
     event_counter = 0
     for counter, event in enumerate(tree):
         log.debug('Processing eventNumber = {}'.format(tree.eventNumber))
@@ -262,7 +262,20 @@ def process_files(settings):
         # Skip events not passing event-level jet cleaning cut
         if not tree.DFCommonJets_eventClean_LooseBad:
            continue
+        
+        # Skip dijet events without truth branches because likely low pt cut designed to remove pileup removed these events
+        if settings["sample"] == "Dijet" and not tree.GetBranchStatus("truth_jet_pt"):
+            continue
 
+        # Skip dijet events with truth cleaning for pileup
+        if settings["sample"] == "Dijet" and len(tree.truth_jet_pt) >= 0 and len(tree.jet_pt) >= 2:
+            try:
+                if not (1.4*tree.truth_jet_pt[0] > (tree.jet_pt[0]+tree.jet_pt[1])/2):
+                    continue
+            except:
+                print("Pileup cleaning based on truth and reco jet pts failed. Skipping event.")
+                continue
+            
         # Select reco jets
         AllPassJets = []
         for ijet in range(len(tree.jet_pt)):
