@@ -282,7 +282,7 @@ def process_files(settings):
             if tree.jet_pt[ijet] > settings['minJetPt']:
                 jet = RPVJet()
                 jet.SetPtEtaPhiE(tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
-                jet.set_qgtagger_bdt(tree.jet_QGTagger_bdt[ijet])
+                jet.set_qgtagger_bdt(tree.jet_JetQGTaggerBDT_score[ijet])
                 if settings['do_matching'] and settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
                     jet.set_matched_parton_barcode(int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
                     jet.set_matched_fsr_barcode(int(tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]))
