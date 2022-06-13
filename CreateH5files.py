@@ -210,7 +210,7 @@ def process_files(settings):
     Structure = {
         'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'QGTaggerBDT'],
         'normweight': ['normweight'],
-        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass'],
+        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass', 'rowNo'],
     }
 
     if settings['do_matching']:
@@ -363,6 +363,7 @@ def process_files(settings):
             Assigments['source'][case] = np.array(array)
 
         # Save event-level variables
+        Assigments['EventVars']['rowNo'] = counter # row number of event
         Assigments['EventVars']['HT'] = ht
         Assigments['EventVars']['deta'] = SelectedJets[0].Eta() - SelectedJets[1].Eta()
         Assigments['EventVars']['djmass'] = (SelectedJets[0]+SelectedJets[1]).M()
