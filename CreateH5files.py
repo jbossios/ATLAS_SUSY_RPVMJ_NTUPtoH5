@@ -69,8 +69,9 @@ def main():
     log.info('Sum of weights: {}'.format(sum_of_weights))
 
     # get list of ttrees using the first input file
-    with ROOT.TFile(input_files[0]) as f:
-        treeNames = [key.GetName() for key in list(f.GetListOfKeys()) if "trees" in key.GetName()]
+    f = ROOT.TFile(input_files[0])
+    treeNames = [key.GetName() for key in list(f.GetListOfKeys()) if "trees" in key.GetName()]
+    f.Close()
 
     # prepare outdir
     if not os.path.isdir(args.outDir):
@@ -79,6 +80,7 @@ def main():
     # make job configurations
     confs = []
     for treeName in treeNames:
+        print(f"Including tree {treeName}")
         for inFileName in input_files:
             
             # understand file type
@@ -91,7 +93,7 @@ def main():
             dsid = int(inFileName.split('user.')[1].split('.')[2])
 
             # create outfile tag
-            tag = f"{treeName}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}"
+            tag = f"{treeName.strip('trees_')}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}"
             if do_matching:
                 criteriaTag = {'UseFTDeltaRvalues':'FTDR', 'RecomputeDeltaRvalues_ptPriority': 'RDR_pt', 'RecomputeDeltaRvalues_drPriority' : 'RDR_dr'}
                 tag += f"_{criteriaTag[args.matchingCriteria]}"
@@ -119,11 +121,12 @@ def main():
                 # global settings
                 'Debug': args.debug
             })
-
+    print(f"Number of jobs launching: {len(confs)}")        
+    
     # save confs to json
     with open(os.path.join(args.outDir,'CreateH5files_confs.json'), 'w') as f:
         json.dump(confs, f, sort_keys=False, indent=4)
-
+    
     # launch jobs
     if args.ncpu == 1:
         for conf in confs:
