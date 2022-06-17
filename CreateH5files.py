@@ -34,7 +34,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--inDir', required=True, help="Input directory of files")
     parser.add_argument('-o', '--outDir', default='./', help="Output directory for files")
-    parser.add_argument('-v', '--version', required=True, help="Production version")
+    parser.add_argument('-v', '--version', default="0", help="Production version")
     parser.add_argument('-j', '--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool.")
     parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt")
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
@@ -44,7 +44,8 @@ def main():
     parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority', help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
     parser.add_argument('--doNotUseFSRs', action='store_true', help="Do not consider final state radiation (FSR) in jet-parton matching")
     parser.add_argument('--debug', action='store_true', help="Enable debug print statemetents")
-    parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files and use outDir as the filename")
+    parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files. File name automatically handled.")
+    parser.add_argument('--combineExcludedDSIDs',  nargs="+", help="List of DSIDs to exclude when combining h5 files")
     args = parser.parse_args()
 
     if args.debug:
@@ -53,9 +54,15 @@ def main():
     # get input files and sum of weights
     input_files = handleInput(args.inDir)
 
+    # make sure output directory exists
+    if not os.path.isdir(args.outDir):
+        os.makedirs(args.outDir)
+
     # if just combine
     if args.combine:
-        return combine_h5(input_files, args.outDir)
+        # remove unwanted dsids
+        input_files = [i for i in input_files if not any([j for j in args.combineExcludedDSIDs if j in i])]
+        return combine_h5(input_files, args.outDir, args.version)
 
     # get sum of weights
     sum_of_weights = get_sum_of_weights(input_files)
@@ -210,7 +217,7 @@ def process_files(settings):
     Structure = {
         'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'QGTaggerBDT'],
         'normweight': ['normweight'],
-        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass'],
+        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass', 'rowNo'],
     }
 
     if settings['do_matching']:
@@ -282,7 +289,7 @@ def process_files(settings):
             if tree.jet_pt[ijet] > settings['minJetPt']:
                 jet = RPVJet()
                 jet.SetPtEtaPhiE(tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
-                jet.set_qgtagger_bdt(tree.jet_QGTagger_bdt[ijet])
+                jet.set_qgtagger_bdt(tree.jet_QGTagger_bdt[ijet]) #tree.jet_JetQGTaggerBDT_score[ijet])
                 if settings['do_matching'] and settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
                     jet.set_matched_parton_barcode(int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
                     jet.set_matched_fsr_barcode(int(tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]))
@@ -363,6 +370,7 @@ def process_files(settings):
             Assigments['source'][case] = np.array(array)
 
         # Save event-level variables
+        Assigments['EventVars']['rowNo'] = counter # row number of event
         Assigments['EventVars']['HT'] = ht
         Assigments['EventVars']['deta'] = SelectedJets[0].Eta() - SelectedJets[1].Eta()
         Assigments['EventVars']['djmass'] = (SelectedJets[0]+SelectedJets[1]).M()
@@ -530,7 +538,7 @@ def process_files(settings):
     log.info('>>> ALL DONE <<<')
 
 
-def combine_h5(inFileList, outFileName):
+def combine_h5(inFileList, outDir, version):
 
     # inherit structure from first file
     with h5py.File(inFileList[0],"r") as f:
@@ -549,15 +557,29 @@ def combine_h5(inFileList, outFileName):
                         assigments_list[key][case].append(np.array(f[key][case]))
                     else:
                         print(f"{inFile} has zero entries in {case}")
-
+    
+    # create outfilename
+    outFileName = ""
+    if any([i for i in list(range(504513,504552+1)) if str(i) in inFileList[0]]):
+        outFileName = "gg_rpv"
+    elif any([i for i in list(range(364700,364712+1)) if str(i) in inFileList[0]]):
+        outFileName = "jetjet_JZWithSW"
+    elif "data" in inFileList[0]:
+        outFileName = "data"
     # check the tag and update output name
     tags = list(set(tags))
     if len(tags) > 1:
         log.error(f"You are combining files with more than one tag: {tags}")
         return
     else:
-        outFileName = outFileName.replace(".h5",f"_{tags[0]}.h5")
-
+        outFileName += f"_{tags[0]}"
+    # add combine tag
+    outFileName += f"_c{version}"
+    # add h5 tag
+    outFileName += ".h5"
+    # add output directory
+    outFileName = os.path.join(outDir, outFileName)
+    
     # create combined file
     log.info(f"Combining into {outFileName}")
     with h5py.File(outFileName,"w") as HF:
@@ -566,6 +588,14 @@ def combine_h5(inFileList, outFileName):
             Groups[key] = HF.create_group(key)
             for case in Structure[key]:
                 Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=np.concatenate(assigments_list[key][case]))
+
+    # save list of files to txt file
+    txtFileName = outFileName.replace(".h5",".txt")
+    log.info(f"Documenting used log files in {txtFileName}")
+    with open(txtFileName,"w") as f:
+        f.write('\n'.join(inFileList))
+
+    log.info("Done!")
 
 if __name__ == '__main__':
     main()
