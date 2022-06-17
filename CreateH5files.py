@@ -68,51 +68,57 @@ def main():
     sum_of_weights = get_sum_of_weights(input_files)
     log.info('Sum of weights: {}'.format(sum_of_weights))
 
+    # get list of ttrees using the first input file
+    with ROOT.TFile(input_files[0]) as f:
+        treeNames = [key.GetName() for key in list(f.GetListOfKeys()) if "trees" in key.GetName()]
+
     # prepare outdir
     if not os.path.isdir(args.outDir):
         os.makedirs(args.outDir)
 
     # make job configurations
     confs = []
-    for inFileName in input_files:
-        
-        # understand file type
-        sample = "Signal"
-        if "dijet" in inFileName:
-            sample = "Dijet"
-        elif "data" in inFileName:
-            sample = "Data"
-        do_matching = sample == 'Signal'
-        dsid = int(inFileName.split('user.')[1].split('.')[2])
+    for treeName in treeNames:
+        for inFileName in input_files:
+            
+            # understand file type
+            sample = "Signal"
+            if "dijet" in inFileName:
+                sample = "Dijet"
+            elif "data" in inFileName:
+                sample = "Data"
+            do_matching = sample == 'Signal'
+            dsid = int(inFileName.split('user.')[1].split('.')[2])
 
-        # create outfile tag
-        tag = f"minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}"
-        if do_matching:
-            criteriaTag = {'UseFTDeltaRvalues':'FTDR', 'RecomputeDeltaRvalues_ptPriority': 'RDR_pt', 'RecomputeDeltaRvalues_drPriority' : 'RDR_dr'}
-            tag += f"_{criteriaTag[args.matchingCriteria]}"
-        tag += f"_v{args.version}"
+            # create outfile tag
+            tag = f"{treeName}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}"
+            if do_matching:
+                criteriaTag = {'UseFTDeltaRvalues':'FTDR', 'RecomputeDeltaRvalues_ptPriority': 'RDR_pt', 'RecomputeDeltaRvalues_drPriority' : 'RDR_dr'}
+                tag += f"_{criteriaTag[args.matchingCriteria]}"
+            tag += f"_v{args.version}"
 
-        confs.append({
-            # input settings
-            'inFileName': inFileName,
-            'sum_of_weights': sum_of_weights[dsid],
-            'sample' : sample,
-            # output settings
-            'outDir': args.outDir,
-            'tag': tag,
-            # jet settings
-            'minJetPt': args.minJetPt,
-            'maxNjets': args.maxNjets,
-            'MinNjets': args.minNjets,
-            'shuffleJets': args.shuffleJets,
-            # matching settings
-            'do_matching' : do_matching,
-            'MatchingCriteria': args.matchingCriteria,
-            'useFSRs': not args.doNotUseFSRs,
-            'dRcut': 0.4,
-            # global settings
-            'Debug': args.debug
-        })
+            confs.append({
+                # input settings
+                'inFileName': inFileName,
+                'sum_of_weights': sum_of_weights[dsid],
+                'sample' : sample,
+                'treeName' : treeName,
+                # output settings
+                'outDir': args.outDir,
+                'tag': tag,
+                # jet settings
+                'minJetPt': args.minJetPt,
+                'maxNjets': args.maxNjets,
+                'MinNjets': args.minNjets,
+                'shuffleJets': args.shuffleJets,
+                # matching settings
+                'do_matching' : do_matching,
+                'MatchingCriteria': args.matchingCriteria,
+                'useFSRs': not args.doNotUseFSRs,
+                'dRcut': 0.4,
+                # global settings
+                'Debug': args.debug
+            })
 
     # save confs to json
     with open(os.path.join(args.outDir,'CreateH5files_confs.json'), 'w') as f:
@@ -255,7 +261,7 @@ def process_files(settings):
     ##############################################################################################
 
     # Create TChain using all input ROOT files
-    tree = ROOT.TChain("trees_SRRPV_")
+    tree = ROOT.TChain(settings["treeName"])
     tree.Add(settings["inFileName"])
     log.info(f'About to enter event loop for {settings["inFileName"]}')
     event_counter = 0
