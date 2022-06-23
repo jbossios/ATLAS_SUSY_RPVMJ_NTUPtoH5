@@ -85,7 +85,7 @@ def main():
             
             # understand file type
             sample = "Signal"
-            if "dijet" in inFileName:
+            if "dijet" in inFileName or "WithSW" in inFileName:
                 sample = "Dijet"
             elif "data" in inFileName:
                 sample = "Data"
@@ -225,8 +225,7 @@ def process_files(settings):
     # Set structure of output H5 file
     Structure = {
         'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'QGTaggerBDT'],
-        'normweight': ['normweight'],
-        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass', 'rowNo'],
+        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass', 'rowNo', 'normweight'],
     }
 
     if settings['do_matching']:
@@ -270,7 +269,7 @@ def process_files(settings):
     event_counter = 0
     for counter, event in enumerate(tree):
         log.debug('Processing eventNumber = {}'.format(tree.eventNumber))
-
+        
         # Skip events with any number of electrons/muons
         if tree.nBaselineElectrons or tree.nBaselineMuons:
            continue
@@ -298,7 +297,7 @@ def process_files(settings):
             if tree.jet_pt[ijet] > settings['minJetPt']:
                 jet = RPVJet()
                 jet.SetPtEtaPhiE(tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
-                jet.set_qgtagger_bdt(tree.jet_QGTagger_bdt[ijet]) #tree.jet_JetQGTaggerBDT_score[ijet])
+                jet.set_qgtagger_bdt(tree.jet_JetQGTaggerBDT_score[ijet]) #tree.jet_QGTagger_bdt[ijet])
                 if settings['do_matching'] and settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
                     jet.set_matched_parton_barcode(int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
                     jet.set_matched_fsr_barcode(int(tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]))
@@ -386,7 +385,7 @@ def process_files(settings):
         if settings['sample'] == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
         Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
-        Assigments['normweight']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
+        Assigments['EventVars']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
 
         if settings['do_matching']:
 
@@ -510,7 +509,7 @@ def process_files(settings):
 
     # Create H5 file
     outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", f"_{settings['tag']}.h5"))
-    log.info('Creating {}...'.format(outFileName))
+    log.info('Creating {}'.format(outFileName))
     with h5py.File(outFileName, 'w') as HF:
         Groups, Datasets = dict(), dict()
         for key in Structure:
