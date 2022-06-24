@@ -45,7 +45,7 @@ def main():
     parser.add_argument('--doNotUseFSRs', action='store_true', help="Do not consider final state radiation (FSR) in jet-parton matching")
     parser.add_argument('--debug', action='store_true', help="Enable debug print statemetents")
     parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files. File name automatically handled.")
-    parser.add_argument('--combineExcludedDSIDs',  nargs="+", help="List of DSIDs to exclude when combining h5 files")
+    parser.add_argument('--combineExcludedDSIDs',  nargs="+", help="List of DSIDs to exclude when combining h5 files", default=[])
     args = parser.parse_args()
 
     if args.debug:
@@ -261,6 +261,12 @@ def process_files(settings):
     ##############################################################################################
     # Loop over events and fill the numpy arrays on each event
     ##############################################################################################
+    
+    # check if output file already exists
+    outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", f"_{settings['tag']}.h5"))
+    if os.path.isfile(outFileName):
+        log.info(f"Output file already exists so skipping: {outFileName}")
+        return 
 
     # Create TChain using all input ROOT files
     tree = ROOT.TChain(settings["treeName"])
@@ -595,6 +601,7 @@ def combine_h5(inFileList, outDir, version):
         for key in Structure:
             Groups[key] = HF.create_group(key)
             for case in Structure[key]:
+                print(f"    Adding dataset: {key}/{case}")
                 Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=np.concatenate(assigments_list[key][case]))
 
     # save list of files to txt file
