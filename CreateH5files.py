@@ -46,6 +46,7 @@ def main():
     parser.add_argument('--debug', action='store_true', help="Enable debug print statemetents")
     parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files. File name automatically handled.")
     parser.add_argument('--combineExcludedDSIDs',  nargs="+", help="List of DSIDs to exclude when combining h5 files", default=[])
+    parser.add_argument('--doOverwrite', action="store_true", help="Overwrite already existing files.")
     args = parser.parse_args()
 
     if args.debug:
@@ -105,6 +106,7 @@ def main():
                 'sum_of_weights': sum_of_weights[dsid],
                 'sample' : sample,
                 'treeName' : treeName,
+                'doOverwrite' : args.doOverwrite,
                 # output settings
                 'outDir': args.outDir,
                 'tag': tag,
@@ -264,7 +266,7 @@ def process_files(settings):
     
     # check if output file already exists
     outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", f"_{settings['tag']}.h5"))
-    if os.path.isfile(outFileName):
+    if os.path.isfile(outFileName) and not settings['doOverwrite']:
         log.info(f"Output file already exists so skipping: {outFileName}")
         return 
 
@@ -277,25 +279,25 @@ def process_files(settings):
         log.debug('Processing eventNumber = {}'.format(tree.eventNumber))
         
         # Skip events with any number of electrons/muons
-        if tree.nBaselineElectrons or tree.nBaselineMuons:
-           continue
+        # if tree.nBaselineElectrons or tree.nBaselineMuons:
+        #    continue
 
-        # Skip events not passing event-level jet cleaning cut
-        if not tree.DFCommonJets_eventClean_LooseBad:
-           continue
+        # # Skip events not passing event-level jet cleaning cut
+        # if not tree.DFCommonJets_eventClean_LooseBad:
+        #    continue
         
-        # Skip dijet events without truth branches because likely low pt cut designed to remove pileup removed these events
-        if settings["sample"] == "Dijet" and not tree.GetBranchStatus("truth_jet_pt"):
-            continue
+        # # Skip dijet events without truth branches because likely low pt cut designed to remove pileup removed these events
+        # if settings["sample"] == "Dijet" and not tree.GetBranchStatus("truth_jet_pt"):
+        #     continue
 
-        # Skip dijet events with truth cleaning for pileup
-        if settings["sample"] == "Dijet" and len(tree.truth_jet_pt) >= 0 and len(tree.jet_pt) >= 2:
-            try:
-                if not (1.4*tree.truth_jet_pt[0] > (tree.jet_pt[0]+tree.jet_pt[1])/2):
-                    continue
-            except:
-                print("Pileup cleaning based on truth and reco jet pts failed. Skipping event.")
-                continue
+        # # Skip dijet events with truth cleaning for pileup
+        # if settings["sample"] == "Dijet" and len(tree.truth_jet_pt) >= 0 and len(tree.jet_pt) >= 2:
+        #     try:
+        #         if not (1.4*tree.truth_jet_pt[0] > (tree.jet_pt[0]+tree.jet_pt[1])/2):
+        #             continue
+        #     except:
+        #         print("Pileup cleaning based on truth and reco jet pts failed. Skipping event.")
+        #         continue
             
         # Select reco jets
         AllPassJets = []
@@ -314,6 +316,9 @@ def process_files(settings):
         if settings['do_matching']:
             nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus("truth_QuarkFromGluino_pt") else 0
             nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus("truth_FSRFromGluinoQuark_pt") else 0
+            if tree.GetBranchStatus("truth_QuarkFromNeutralino_pt"):
+                nQuarksFromGs += len(tree.truth_QuarkFromNeutralino_pt)
+        print(f"nQuarksFromGs {nQuarksFromGs}")
 
         # Apply event selections
         passEventSelection = True
