@@ -39,7 +39,7 @@ def main():
     parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt")
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
     parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
-    parser.add_argument('--nQuarksPerGluino', default=6, type=int, help="Number of quarks per gluino from signal model")
+    parser.add_argument('--signalModel', default='2x3', type=str, help="Signal model (2x3 or 2x5)")
     parser.add_argument('--shuffleJets', action='store_true', help="Shuffle jets before saving")
     parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority', help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
     parser.add_argument('--doNotUseFSRs', action='store_true', help="Do not consider final state radiation (FSR) in jet-parton matching")
@@ -107,6 +107,7 @@ def main():
                 'sample' : sample,
                 'treeName' : treeName,
                 'doOverwrite' : args.doOverwrite,
+                'signalModel': args.signalModel,
                 # output settings
                 'outDir': args.outDir,
                 'tag': tag,
@@ -174,24 +175,36 @@ def get_sum_of_weights(file_list):
     return sum_of_weights
 
 
-def get_quark_flavour(pdgid, g, dictionary):
-    """ Function that assigns quarks to q1, q2 or q3 """
-    if dictionary[g]['q1'] == 0:
-        dictionary[g]['q1'] = pdgid
-        qFlavour = 'q1'
-    elif dictionary[g]['q2'] == 0:
-        dictionary[g]['q2'] = pdgid
-        qFlavour = 'q2'
-    else:
-        qFlavour = 'q3'
+def get_quark_flavour(quark_labels, pdgid, g, dictionary):
+    """ Function that assigns quarks to
+    q1, q2 or q3 (q1, q2, q3, q4 or q5) for 2x3 (2x5) model """
+    n_quark_labels = len(quark_labels)
+    for qi, qlabel in enumerate(quark_labels, 1):
+        if qi == n_quark_labels:
+            if dictionary[g][qlabel] == 0:
+                dictionary[g][qlabel] = pdgid
+                qFlavour = qlabel
+        else:
+            qFlavour = qlabel
+    #if dictionary[g]['q1'] == 0:
+    #    dictionary[g]['q1'] = pdgid
+    #    qFlavour = 'q1'
+    #elif dictionary[g]['q2'] == 0:
+    #    dictionary[g]['q2'] = pdgid
+    #    qFlavour = 'q2'
+    #else:
+    #    qFlavour = 'q3'
     return dictionary, qFlavour
 
 
-def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dict, selected_jets, jet_index):
-    """ Find to which gluino (g1 or g2) a jet was matched and determines if the parton is q1, q2 or q3 (see convention above) """
+def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dict, selected_jets, jet_index):
+    """ Find to which gluino (g1 or g2) a jet was matched and determine to which parton qX
+    with X=[1, 2, 3] (X=[1, 2, 3, 4, 5]) for the 2x3 (2x5) model
+    (see convention on process_files())
+    """
     if g_barcodes['g1'] == 0:  # not assigned yet to any quark parent barcode
         g_barcodes['g1'] = q_parent_barcode
-        q_pdgid_dict, q_flavour = get_quark_flavour(pdgid, 'g1', q_pdgid_dict)
+        q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g1', q_pdgid_dict)
         if assigments['g1'][q_flavour] == -1:  # not assigned yet
             assigments['g1'][q_flavour] = jet_index
             assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
@@ -202,7 +215,7 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
     else:  # g1 was defined alredy (check if quark parent barcode agrees with it)
         if g_barcodes['g1'] == q_parent_barcode:
             q_pdgid_dict, q_flavour = get_quark_flavour(
-                pdgid, 'g1', q_pdgid_dict)
+                quark_labels, pdgid, 'g1', q_pdgid_dict)
             if assigments['g1'][q_flavour] == -1:  # not assigned yet
                 assigments['g1'][q_flavour] = jet_index
                 assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
@@ -211,7 +224,7 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
                     assigments['g1'][q_flavour] = jet_index
                     assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
         else:
-            q_pdgid_dict, q_flavour = get_quark_flavour(pdgid, 'g2', q_pdgid_dict)
+            q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g2', q_pdgid_dict)
             if assigments['g2'][q_flavour] == -1:  # not assigned yet
                 assigments['g2'][q_flavour] = jet_index
                 assigments['g2'][q_flavour.replace('q', 'f')] = pdgid
@@ -223,6 +236,8 @@ def make_assigments(assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dic
 
 
 def process_files(settings):
+
+    signal_model = settings['signalModel']
 
     # Set structure of output H5 file
     Structure = {
@@ -241,9 +256,17 @@ def process_files(settings):
         # q1 is the first matched quark found for the corresponding gluino (f1 is its pdgID)
         # q2 is the second matched quark found for the corresponding gluino (f2 is its pdgID)
         # q3 is the third matched quark found for the corresponding gluino (f3 is its pdgID)
+        # for 2x5 signals, q4 (q5) is the fourth (fifth) matched quark found for the corresponding gluino (f4/f5 are their pdgIDs)
         # g1 is the first parent gluino for first matched quark
-        Structure['g1'] = ['mask', 'q1', 'q2', 'q3', 'f1', 'f2', 'f3']
-        Structure['g2'] = ['mask', 'q1', 'q2', 'q3', 'f1', 'f2', 'f3']
+        quark_labels = ['q1', 'q2', 'q3']
+        if signal_model == '2x5':
+            quark_labels += ['q4', 'q5']
+        for gcase in ['g1', 'g2']:
+            Structure[gcase] = ['mask']
+            Structure[gcase] += quark_labels
+            Structure[gcase] += [label.replace('q', 'f') for label in quark_labels]
+        #Structure['g1'] = ['mask', 'q1', 'q2', 'q3', 'f1', 'f2', 'f3']
+        #Structure['g2'] = ['mask', 'q1', 'q2', 'q3', 'f1', 'f2', 'f3']
         Structure['EventVars'].append('gmass')
 
         # Reconstructed mass by truth mass
@@ -348,7 +371,7 @@ def process_files(settings):
                     break
 
         # Put place-holder values for each variable
-        # set jet index for each particle q1,q2,q3 to -1 (i.e. no matching) and mask to True
+        # set jet index for each particle q1,q2,q3 (q4,q5 for 2x5) to -1 (i.e. no matching) and mask to True
         def init_value(case):
             if case == 'mask':
                 return True
@@ -404,7 +427,7 @@ def process_files(settings):
             gBarcodes = {'g1': 0, 'g2': 0}  # fill temporary values
 
             # Collect quark -> gluino associations
-            qPDGIDs = {g: {'q1': 0, 'q2': 0, 'q3': 0}
+            qPDGIDs = {g: {label: 0 for label in quark_labels}
                        for g in ['g1', 'g2']}  # fill temporary values
 
             # Select quarks from gluinos
@@ -454,7 +477,7 @@ def process_files(settings):
             # Fill Assigments (info for matched jets)
             for jet_index, jet in enumerate(matched_jets):
                 if jet.is_matched():
-                    Assigments = make_assigments(Assigments, gBarcodes, jet.get_match_gluino_barcode(
+                    Assigments = make_assigments(quark_labels, Assigments, gBarcodes, jet.get_match_gluino_barcode(
                     ), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index)
 
             # Check if fully matched
@@ -482,7 +505,7 @@ def process_files(settings):
                 if Assigments[ig]['mask']:
                     Jets2sum = []
                     JetIndexes = []
-                    for key in ['q1', 'q2', 'q3']:
+                    for key in quark_labels:
                         jIndex = Assigments[ig][key]
                         if jIndex not in JetIndexes:
                             JetIndexes.append(jIndex)
