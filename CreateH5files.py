@@ -47,6 +47,7 @@ def main():
     parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files. File name automatically handled.")
     parser.add_argument('--combineExcludedDSIDs',  nargs="+", help="List of DSIDs to exclude when combining h5 files", default=[])
     parser.add_argument('--doOverwrite', action="store_true", help="Overwrite already existing files.")
+    parser.add_argument('--useOldMCEvtWeightBranch', action="store_true", default=False, help="Use mcEventWeight instead of mcEventWeightsVector.")
     args = parser.parse_args()
 
     if args.debug:
@@ -108,6 +109,7 @@ def main():
                 'treeName' : treeName,
                 'doOverwrite' : args.doOverwrite,
                 'signalModel': args.signalModel,
+                'useOldMCEvtWeightBranch': args.useOldMCEvtWeightBranch,
                 # output settings
                 'outDir': args.outDir,
                 'tag': tag,
@@ -341,13 +343,12 @@ def process_files(settings):
             nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus("truth_FSRFromGluinoQuark_pt") else 0
             if tree.GetBranchStatus("truth_QuarkFromNeutralino_pt"):
                 nQuarksFromGs += len(tree.truth_QuarkFromNeutralino_pt)
-        print(f"nQuarksFromGs {nQuarksFromGs}")
 
         # Apply event selections
         passEventSelection = True
         if nJets < settings['MinNjets']:
             passEventSelection = False
-        if settings['do_matching'] and nQuarksFromGs != 6:
+        if settings['do_matching'] and nQuarksFromGs != len(quark_labels) * 2:
             passEventSelection = False
         if not passEventSelection:
             continue  # skip event
@@ -419,7 +420,10 @@ def process_files(settings):
         if settings['sample'] == 'Signal':
             Assigments['EventVars']['gmass'] = gmass
         Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
-        Assigments['EventVars']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
+        if settings['useOldMCEvtWeightBranch']:
+            Assigments['EventVars']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
+        else:
+            Assigments['EventVars']['normweight'] = tree.mcEventWeightsVector[0] * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
 
         if settings['do_matching']:
 
