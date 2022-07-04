@@ -188,14 +188,6 @@ def get_quark_flavour(quark_labels, pdgid, g, dictionary):
                 qFlavour = qlabel
         else:
             qFlavour = qlabel
-    #if dictionary[g]['q1'] == 0:
-    #    dictionary[g]['q1'] = pdgid
-    #    qFlavour = 'q1'
-    #elif dictionary[g]['q2'] == 0:
-    #    dictionary[g]['q2'] = pdgid
-    #    qFlavour = 'q2'
-    #else:
-    #    qFlavour = 'q3'
     return dictionary, qFlavour
 
 
@@ -267,8 +259,6 @@ def process_files(settings):
             Structure[gcase] = ['mask']
             Structure[gcase] += quark_labels
             Structure[gcase] += [label.replace('q', 'f') for label in quark_labels]
-        #Structure['g1'] = ['mask', 'q1', 'q2', 'q3', 'f1', 'f2', 'f3']
-        #Structure['g2'] = ['mask', 'q1', 'q2', 'q3', 'f1', 'f2', 'f3']
         Structure['EventVars'].append('gmass')
 
         # Reconstructed mass by truth mass
@@ -452,8 +442,8 @@ def process_files(settings):
                 Quarks[iquark].set_pdgid(quark_pdgid)
 
             # Select FSR quarks from gluinos
-            FSRsFromGluinos = [RPVParton() for i in range(nFSRsFromGs)]
             log.debug('Get FSRs from gluinos')
+            FSRsFromGluinos = [RPVParton() for i in range(nFSRsFromGs)]
             for iFSR in range(nFSRsFromGs):
                 FSRsFromGluinos[iFSR].SetPtEtaPhiE(tree.truth_FSRFromGluinoQuark_pt[iFSR], tree.truth_FSRFromGluinoQuark_eta[iFSR],
                                                    tree.truth_FSRFromGluinoQuark_phi[iFSR], tree.truth_FSRFromGluinoQuark_e[iFSR])
@@ -496,6 +486,7 @@ def process_files(settings):
                 matcher.add_fsrs(FSRsFromGluinos)
             if settings['Debug']:
                 matcher.set_property('Debug', True)
+            matcher.set_property('nMatchedJets', len(quark_labels) * 2)
             matcher.set_property('MatchingCriteria',
                                  settings['MatchingCriteria'])
             if settings['MatchingCriteria'] != "UseFTDeltaRvalues":
@@ -593,8 +584,8 @@ def process_files(settings):
         outFile.Close()
 
         # print matching efficiency
-        log.info(f'matching efficiency (percentage of events where 6 quarks are matched): {matchedEvents/event_counter}')
-        log.info(f'Number of events where 6 quarks are matched: {matchedEvents}')
+        log.info(f'matching efficiency (percentage of events where {len(quark_labels) * 2} quarks are matched): {matchedEvents/event_counter}')
+        log.info(f'Number of events where {len(quark_labels) * 2} quarks are matched: {matchedEvents}')
         log.info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
         for flav in quark_flavours:
             if NquarksByFlavour[flav] != 0:
