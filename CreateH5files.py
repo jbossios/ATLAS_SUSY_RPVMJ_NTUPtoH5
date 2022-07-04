@@ -340,15 +340,16 @@ def process_files(settings):
         nJets = len(SelectedJets)
         if settings['do_matching']:
             nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus("truth_QuarkFromGluino_pt") else 0
+            nQuarks = nQuarksFromGs
             nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus("truth_FSRFromGluinoQuark_pt") else 0
             if tree.GetBranchStatus("truth_QuarkFromNeutralino_pt"):
-                nQuarksFromGs += len(tree.truth_QuarkFromNeutralino_pt)
+                nQuarks += len(tree.truth_QuarkFromNeutralino_pt)
 
         # Apply event selections
         passEventSelection = True
         if nJets < settings['MinNjets']:
             passEventSelection = False
-        if settings['do_matching'] and nQuarksFromGs != len(quark_labels) * 2:
+        if settings['do_matching'] and nQuarks != len(quark_labels) * 2:
             passEventSelection = False
         if not passEventSelection:
             continue  # skip event
@@ -435,39 +436,62 @@ def process_files(settings):
                        for g in ['g1', 'g2']}  # fill temporary values
 
             # Select quarks from gluinos
-            QuarksFromGluinos = [RPVParton() for i in range(nQuarksFromGs)]
+            log.debug('Get quarks from gluinos')
+            Quarks = [RPVParton() for i in range(nQuarksFromGs)]
             for iquark in range(nQuarksFromGs):
-                QuarksFromGluinos[iquark].SetPtEtaPhiE(tree.truth_QuarkFromGluino_pt[iquark], tree.truth_QuarkFromGluino_eta[iquark],
-                                                       tree.truth_QuarkFromGluino_phi[iquark], tree.truth_QuarkFromGluino_e[iquark])
-                QuarksFromGluinos[iquark].set_gluino_barcode(
-                    tree.truth_QuarkFromGluino_ParentBarcode[iquark])
-                QuarksFromGluinos[iquark].set_barcode(
-                    tree.truth_QuarkFromGluino_barcode[iquark])
-                QuarksFromGluinos[iquark].set_pdgid(
-                    tree.truth_QuarkFromGluino_pdgID[iquark])
+                quark_pt = tree.truth_QuarkFromGluino_pt[iquark]
+                quark_eta = tree.truth_QuarkFromGluino_eta[iquark]
+                quark_phi = tree.truth_QuarkFromGluino_phi[iquark]
+                quark_e = tree.truth_QuarkFromGluino_e[iquark]
+                quark_parent_barcode = tree.truth_QuarkFromGluino_ParentBarcode[iquark]
+                quark_barcode = tree.truth_QuarkFromGluino_barcode[iquark]
+                quark_pdgid = tree.truth_QuarkFromGluino_pdgID[iquark]
+                Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
+                Quarks[iquark].set_gluino_barcode(quark_parent_barcode)
+                Quarks[iquark].set_barcode(quark_barcode)
+                Quarks[iquark].set_pdgid(quark_pdgid)
 
             # Select FSR quarks from gluinos
             FSRsFromGluinos = [RPVParton() for i in range(nFSRsFromGs)]
+            log.debug('Get FSRs from gluinos')
             for iFSR in range(nFSRsFromGs):
                 FSRsFromGluinos[iFSR].SetPtEtaPhiE(tree.truth_FSRFromGluinoQuark_pt[iFSR], tree.truth_FSRFromGluinoQuark_eta[iFSR],
                                                    tree.truth_FSRFromGluinoQuark_phi[iFSR], tree.truth_FSRFromGluinoQuark_e[iFSR])
                 # Find quark which emitted this FSR and get its parentBarcode
-                for parton in QuarksFromGluinos:
+                quark_found = False
+                for parton in Quarks:
                     if parton.get_barcode() == tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR]:
+                        quark_found = True
                         FSRsFromGluinos[iFSR].set_gluino_barcode(
                             parton.get_gluino_barcode())
                         FSRsFromGluinos[iFSR].set_pdgid(parton.get_pdgid())
+                if not quark_found:
+                    log.fatal('Quark that emitted FSR (iFSR = {}) not found, exiting'.format(iFSR))
+                    sys.exit(1)
                 FSRsFromGluinos[iFSR].set_barcode(
                     tree.truth_FSRFromGluinoQuark_barcode[iFSR])
                 FSRsFromGluinos[iFSR].set_quark_barcode(
                     tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR])
 
-            # Rename array with partons to be matched to reco jets
-            Partons = QuarksFromGluinos
-            FSRs = FSRsFromGluinos
+            # Add quarks from neutralinos
+            log.debug('Adding quarks from neutralinos')
+            for iquark in range(nQuarksFromGs, nQuarks):
+                index = iquark - nQuarksFromGs
+                quark_pt = tree.truth_QuarkFromNeutralino_pt[index]
+                quark_eta = tree.truth_QuarkFromNeutralino_eta[index]
+                quark_phi = tree.truth_QuarkFromNeutralino_phi[index]
+                quark_e = tree.truth_QuarkFromNeutralino_e[index]
+                quark_parent_barcode = tree.truth_QuarkFromNeutralino_ParentBarcode[index]
+                quark_barcode = tree.truth_QuarkFromNeutralino_barcode[index]
+                quark_pdgid = tree.truth_QuarkFromNeutralino_pdgID[index]
+                Quarks += [RPVParton()]
+                Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
+                Quarks[iquark].set_gluino_barcode(quark_parent_barcode)
+                Quarks[iquark].set_barcode(quark_barcode)
+                Quarks[iquark].set_pdgid(quark_pdgid)
 
             # Match reco jets to closest parton
-            matcher = RPVMatcher(Jets=SelectedJets, Partons=QuarksFromGluinos)
+            matcher = RPVMatcher(Jets = SelectedJets, Partons = Quarks)
             if settings['useFSRs']:
                 matcher.add_fsrs(FSRsFromGluinos)
             if settings['Debug']:
