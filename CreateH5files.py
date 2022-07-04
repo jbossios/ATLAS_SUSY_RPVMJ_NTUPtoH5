@@ -514,7 +514,7 @@ def process_files(settings):
                 matcher.add_fsrs(FSRs)
             if settings['Debug']:
                 matcher.set_property('Debug', True)
-            matcher.set_property('nMatchedJets', len(quark_labels) * 2)
+            matcher.set_property('maxNmatchedJets', len(quark_labels) * 2)
             matcher.set_property('MatchingCriteria',
                                  settings['MatchingCriteria'])
             if settings['MatchingCriteria'] != "UseFTDeltaRvalues":
