@@ -444,27 +444,27 @@ def process_files(settings):
                 Quarks[iquark].set_barcode(quark_barcode)
                 Quarks[iquark].set_pdgid(quark_pdgid)
 
-            # Select FSR quarks from gluinos
-            log.debug('Get FSRs from gluinos')
-            FSRs = [RPVParton() for i in range(nFSRsFromGs)]
-            for iFSR in range(nFSRsFromGs):
-                FSRs[iFSR].SetPtEtaPhiE(tree.truth_FSRFromGluinoQuark_pt[iFSR], tree.truth_FSRFromGluinoQuark_eta[iFSR],
-                                                   tree.truth_FSRFromGluinoQuark_phi[iFSR], tree.truth_FSRFromGluinoQuark_e[iFSR])
-                # Find quark which emitted this FSR and get its parentBarcode
-                quark_found = False
-                for parton in Quarks:
-                    if parton.get_barcode() == tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR]:
-                        quark_found = True
-                        FSRs[iFSR].set_gluino_barcode(
-                            parton.get_gluino_barcode())
-                        FSRs[iFSR].set_pdgid(parton.get_pdgid())
-                if not quark_found:
-                    log.fatal('Quark from gluino that emitted FSR (iFSR = {}) not found, exiting'.format(iFSR))
-                    sys.exit(1)
-                FSRs[iFSR].set_barcode(
-                    tree.truth_FSRFromGluinoQuark_barcode[iFSR])
-                FSRs[iFSR].set_quark_barcode(
-                    tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR])
+            if settings['useFSRs']:  # select FSR quarks from gluinos
+              log.debug('Get FSRs from gluinos')
+              FSRs = [RPVParton() for i in range(nFSRsFromGs)]
+              for iFSR in range(nFSRsFromGs):
+                  FSRs[iFSR].SetPtEtaPhiE(tree.truth_FSRFromGluinoQuark_pt[iFSR], tree.truth_FSRFromGluinoQuark_eta[iFSR],
+                                                     tree.truth_FSRFromGluinoQuark_phi[iFSR], tree.truth_FSRFromGluinoQuark_e[iFSR])
+                  # Find quark which emitted this FSR and get its parentBarcode
+                  quark_found = False
+                  for parton in Quarks:
+                      if parton.get_barcode() == tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR]:
+                          quark_found = True
+                          FSRs[iFSR].set_gluino_barcode(
+                              parton.get_gluino_barcode())
+                          FSRs[iFSR].set_pdgid(parton.get_pdgid())
+                  if not quark_found:
+                      log.fatal('Quark from gluino that emitted FSR (iFSR = {}) not found, exiting'.format(iFSR))
+                      sys.exit(1)
+                  FSRs[iFSR].set_barcode(
+                      tree.truth_FSRFromGluinoQuark_barcode[iFSR])
+                  FSRs[iFSR].set_quark_barcode(
+                      tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR])
 
             # Add quarks from neutralinos
             log.debug('Adding quarks from neutralinos')
@@ -483,8 +483,7 @@ def process_files(settings):
                 Quarks[iquark].set_barcode(quark_barcode)
                 Quarks[iquark].set_pdgid(quark_pdgid)
 
-            if signal_model == '2x5':
-                # Select FSR quarks from neutralinos
+            if signal_model == '2x5' and settings['useFSRs']:  # select FSR quarks from neutralinos
                 log.debug('Get FSRs from neutralinos')
                 FSRs += [RPVParton() for i in range(nFSRsFromNeutralinos)]
                 for iFSR in range(nFSRsFromGs, nFSRsFromNeutralinos + nFSRsFromGs):
@@ -530,7 +529,8 @@ def process_files(settings):
             # Check if fully matched
             n_matched_jets = sum(
                 [1 if jet.is_matched() else 0 for jet in matched_jets])
-            if n_matched_jets == 6:
+            log.debug(f'number of matched jets = {n_matched_jets}')
+            if n_matched_jets == len(quark_labels) * 2:
                 matchedEventNumbers.append(tree.eventNumber)
                 matchedEvents += 1
 
