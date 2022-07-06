@@ -186,12 +186,10 @@ def get_quark_flavour(quark_labels, pdgid, g, dictionary):
     n_quark_labels = len(quark_labels)
     for qi, qlabel in enumerate(quark_labels, 1):
         if qi == n_quark_labels:
-            if dictionary[g][qlabel] == 0:
-                dictionary[g][qlabel] = pdgid
-                qFlavour = qlabel
-        else:
-            qFlavour = qlabel
-    return dictionary, qFlavour
+            return dictionary, qlabel
+        if dictionary[g][qlabel] == 0:
+            dictionary[g][qlabel] = pdgid
+            return dictionary, qlabel
 
 
 def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dict, selected_jets, jet_index):
@@ -315,6 +313,7 @@ def process_files(settings):
         # Reconstructed gluino mass - true gluino mass
         hGluinoMassDiff = ROOT.TH1D('GluinoMassDiff', '', 10000, -10000, 10000)
         matchedEvents = 0
+        partial_events = 0  # keep track of partially reconstructed events (gluinos)
         multipleQuarkMatchingEvents = 0
         matchedEventNumbers = []
 
@@ -535,7 +534,7 @@ def process_files(settings):
 
             # Create event display
             if settings['doEventDisplays']:
-                make_event_display(tree.eventNumber, SelectedJets, Quarks, [] if not settings['useFSRs'] else FSRs)  # TODO: add FSRs
+                make_event_display(tree.eventNumber, SelectedJets, Quarks, [] if not settings['useFSRs'] else FSRs)
 
             # Match reco jets to closest parton
             matcher = RPVMatcher(Jets = SelectedJets, Partons = Quarks)
@@ -573,6 +572,10 @@ def process_files(settings):
                     if Assigments[g][key] == -1:
                         TempMask = False
                 Assigments[g]['mask'] = TempMask
+
+            # Count number of at least partially reconstructed events
+            if Assigments['g1']['mask'] or Assigments['g2']['mask']:
+                partial_events += 1
 
             # Compare reconstructed gluino mass with true gluino mass
             MultipleJetsMatchingAQuark = False
@@ -643,6 +646,7 @@ def process_files(settings):
 
         # print matching efficiency
         log.info(f'matching efficiency (percentage of events where {len(quark_labels) * 2} quarks are matched): {matchedEvents/event_counter}')
+        log.info(f'partial matching efficiency (percentage of events where at least one gluino is matched): {partial_events/event_counter}')
         log.info(f'Number of events where {len(quark_labels) * 2} quarks are matched: {matchedEvents}')
         log.info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
         for flav in quark_flavours:
