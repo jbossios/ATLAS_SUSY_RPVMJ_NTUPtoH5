@@ -23,6 +23,7 @@ import argparse
 import sys
 import json
 random.seed(4)  # set the random seed for reproducibility
+import matplotlib.pyplot as plt
 
 # global variables
 logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
@@ -35,7 +36,7 @@ def main():
     parser.add_argument('-i', '--inDir', required=True, help="Input directory of files")
     parser.add_argument('-o', '--outDir', default='./', help="Output directory for files")
     parser.add_argument('-v', '--version', default="0", help="Production version")
-    parser.add_argument('-j', '--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool.")
+    parser.add_argument('-j', '--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool")
     parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt")
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
     parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
@@ -44,10 +45,11 @@ def main():
     parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority', help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
     parser.add_argument('--doNotUseFSRs', action='store_true', help="Do not consider final state radiation (FSR) in jet-parton matching")
     parser.add_argument('--debug', action='store_true', help="Enable debug print statemetents")
-    parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files. File name automatically handled.")
+    parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files. File name automatically handled")
     parser.add_argument('--combineExcludedDSIDs',  nargs="+", help="List of DSIDs to exclude when combining h5 files", default=[])
-    parser.add_argument('--doOverwrite', action="store_true", help="Overwrite already existing files.")
-    parser.add_argument('--useOldMCEvtWeightBranch', action="store_true", default=False, help="Use mcEventWeight instead of mcEventWeightsVector.")
+    parser.add_argument('--doOverwrite', action="store_true", help="Overwrite already existing files")
+    parser.add_argument('--useOldMCEvtWeightBranch', action="store_true", default=False, help="Use mcEventWeight instead of mcEventWeightsVector")
+    parser.add_argument('--doEventDisplays', action="store_true", default=False, help="Create event displays (only done if matching is performed)")
     args = parser.parse_args()
 
     if args.debug:
@@ -124,7 +126,8 @@ def main():
                 'useFSRs': not args.doNotUseFSRs,
                 'dRcut': 0.4,
                 # global settings
-                'Debug': args.debug
+                'Debug': args.debug,
+                'doEventDisplays': args.doEventDisplays
             })
     print(f"Number of jobs launching: {len(confs)}")        
     
@@ -227,6 +230,50 @@ def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgi
                     assigments['g2'][q_flavour] = jet_index
                     assigments['g2'][q_flavour.replace('q', 'f')] = pdgid
     return assigments
+
+
+def make_event_display(event_number, jets, quarks, fsrs):
+    # output file name
+    out_name = f'Plots/event_display_{event_number}.pdf'
+
+    # prepare data
+    jet_pts = np.array([jet.Pt() for jet in jets])
+    jet_etas = np.array([jet.Eta() for jet in jets])
+    jet_phis = np.array([jet.Phi() for jet in jets])
+    quark_pts = np.array([quark.Pt() for quark in quarks])
+    quark_etas = np.array([quark.Eta() for quark in quarks])
+    quark_phis = np.array([quark.Phi() for quark in quarks])
+    fsr_pts = np.array([fsr.Pt() for fsr in fsrs])
+    fsr_etas = np.array([fsr.Eta() for fsr in fsrs])
+    fsr_phis = np.array([fsr.Phi() for fsr in fsrs])
+
+    # make figure
+    fig, ax = plt.subplots()
+
+    plt.scatter(quark_etas, quark_phis, c=quark_pts, s=50,  label = "quarks", cmap='viridis_r')
+    plt.scatter(fsr_etas, fsr_phis, c=fsr_pts, marker = 'X', s=30,  label = "FSRs", cmap='viridis_r')
+    plt.scatter(jet_etas, jet_phis, c=jet_pts, alpha=0.5, s=400,  label = "jets", cmap='viridis_r')
+
+    for ijet in range(len(jets)):
+      if not ijet:
+        ax.add_patch(plt.Circle((jet_etas[ijet], jet_phis[ijet]), 0.4, color='k', fill = False, linestyle='dashed', alpha=0.5, label='R = 0.4'))
+      else:
+        ax.add_patch(plt.Circle((jet_etas[ijet], jet_phis[ijet]), 0.4, color='k', fill = False, linestyle='dashed', alpha=0.5))
+
+    plt.xlim([-4, 4])
+    plt.ylim([-np.pi, np.pi])
+
+    ax.set_xlabel(r'$\eta$')
+    ax.set_ylabel(r'$\phi$')
+    ax.set_title('eventNumber = {}'.format(event_number))
+    ax.legend()
+
+    cbar = plt.colorbar()
+    cbar.set_label('pT [GeV]')
+    plt.legend()
+    fig.tight_layout()
+
+    plt.savefig(out_name)
 
 
 def process_files(settings):
@@ -485,6 +532,10 @@ def process_files(settings):
                         tree.truth_FSRFromNeutralinoQuark_barcode[index])
                     FSRs[iFSR].set_quark_barcode(
                         tree.truth_FSRFromNeutralinoQuark_LastNeutralinoInChain_barcode[index])
+
+            # Create event display
+            if settings['doEventDisplays']:
+                make_event_display(tree.eventNumber, SelectedJets, Quarks, [] if not settings['useFSRs'] else FSRs)  # TODO: add FSRs
 
             # Match reco jets to closest parton
             matcher = RPVMatcher(Jets = SelectedJets, Partons = Quarks)
