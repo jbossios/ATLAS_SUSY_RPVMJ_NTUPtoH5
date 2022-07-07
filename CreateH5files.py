@@ -401,6 +401,8 @@ def process_files(settings):
         hGluinoMassDiff = ROOT.TH1D('GluinoMassDiff', '', 10000, -10000, 10000)
         matchedEvents = 0
         partial_events = 0  # keep track of partially reconstructed events (gluinos)
+        neutralinos_fully_matched = 0
+        neutralinos_partially_matched = 0
         multipleQuarkMatchingEvents = 0
         matchedEventNumbers = []
 
@@ -700,6 +702,21 @@ def process_files(settings):
             if Assigments['g1']['mask'] or Assigments['g2']['mask']:
                 partial_events += 1
 
+            # Check if neutralinos were matched
+            if signal_model == '2x5':
+                neutralino_barcodes = list(set([quark.get_neutralino_barcode() for quark in Quarks if quark.get_neutralino_barcode() != -999]))
+                matched_neutralinos = {barcode: 0 for barcode in neutralino_barcodes}
+                for jet in matched_jets:
+                    match_neutralino_barcode = jet.get_match_neutralino_barcode()
+                    if match_neutralino_barcode in matched_neutralinos:
+                        matched_neutralinos[match_neutralino_barcode] += 1
+                fully_matched_neutralinos = sum([1 if n == 3 else 0 for barcode, n in matched_neutralinos.items()])
+                if fully_matched_neutralinos == 1:
+                    neutralinos_partially_matched += 1
+                elif fully_matched_neutralinos == 2:
+                    neutralinos_partially_matched += 1
+                    neutralinos_fully_matched += 1
+
             # Compare reconstructed gluino mass with true gluino mass
             MultipleJetsMatchingAQuark = False
             AllMatchedJetsIndexes = []
@@ -770,6 +787,9 @@ def process_files(settings):
         # print matching efficiency
         log.info(f'matching efficiency (percentage of events where {len(quark_labels) * 2} quarks are matched): {matchedEvents/event_counter}')
         log.info(f'partial matching efficiency (percentage of events where at least one gluino is matched): {partial_events/event_counter}')
+        if signal_model == '2x5':
+            log.info(f'matching efficiency for reconstructing both neutralinos: {neutralinos_fully_matched/event_counter}')
+            log.info(f'matching efficiency for reconstructing at least one neutralino: {neutralinos_partially_matched/event_counter}')
         log.info(f'Number of events where {len(quark_labels) * 2} quarks are matched: {matchedEvents}')
         log.info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
         for flav in quark_flavours:
