@@ -50,7 +50,7 @@ def main():
     parser.add_argument('--doOverwrite', action="store_true", help="Overwrite already existing files")
     parser.add_argument('--useOldMCEvtWeightBranch', action="store_true", default=False, help="Use mcEventWeight instead of mcEventWeightsVector")
     parser.add_argument('--doEventDisplays', action="store_true", default=False, help="Create event displays (only done if matching is performed)")
-    parser.add_argument('--nominalOnly', action="store_true", default=False, help="Process only nominal TTree (off by default)")
+    parser.add_argument('--doSystematics', action="store_true", default=False, help="Process systematic TTrees (off by default)")
     args = parser.parse_args()
 
     if args.debug:
@@ -75,8 +75,9 @@ def main():
 
     # get list of ttrees using the first input file
     f = ROOT.TFile(input_files[0])
-    treeNames = [key.GetName() for key in list(f.GetListOfKeys()) if "trees" in key.GetName()]
-    if args.nominalOnly:
+    if args.doSystematics:
+        treeNames = [key.GetName() for key in list(f.GetListOfKeys()) if "trees" in key.GetName()]
+    else:
         treeNames = ['trees_SRRPV_']
     f.Close()
 
@@ -233,9 +234,13 @@ def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgi
     return assigments
 
 
-def make_event_display(event_number, jets, quarks, fsrs):
+def make_event_display_pt_ranked(event_number, jets_dict, quarks, fsrs = []):
+    # unpack jet dict
+    jets = jets_dict['jets']
+    jets_level = jets_dict['level']
+
     # output file name
-    out_name = f'Plots/event_display_{event_number}.pdf'
+    out_name = f'Plots/event_display_{event_number}{"" if jets_level == "reco" else "_truth"}.pdf'
 
     # prepare data
     jet_pts = np.array([jet.Pt() for jet in jets])
@@ -244,22 +249,24 @@ def make_event_display(event_number, jets, quarks, fsrs):
     quark_pts = np.array([quark.Pt() for quark in quarks])
     quark_etas = np.array([quark.Eta() for quark in quarks])
     quark_phis = np.array([quark.Phi() for quark in quarks])
-    fsr_pts = np.array([fsr.Pt() for fsr in fsrs])
-    fsr_etas = np.array([fsr.Eta() for fsr in fsrs])
-    fsr_phis = np.array([fsr.Phi() for fsr in fsrs])
+    if fsrs:
+        fsr_pts = np.array([fsr.Pt() for fsr in fsrs])
+        fsr_etas = np.array([fsr.Eta() for fsr in fsrs])
+        fsr_phis = np.array([fsr.Phi() for fsr in fsrs])
 
     # make figure
     fig, ax = plt.subplots()
 
     plt.scatter(quark_etas, quark_phis, c=quark_pts, s=50,  label = "quarks", cmap='viridis_r')
-    plt.scatter(fsr_etas, fsr_phis, c=fsr_pts, marker = 'X', s=30,  label = "FSRs", cmap='viridis_r')
-    plt.scatter(jet_etas, jet_phis, c=jet_pts, alpha=0.5, s=400,  label = "jets", cmap='viridis_r')
+    if fsrs:
+        plt.scatter(fsr_etas, fsr_phis, c=fsr_pts, marker = 'X', s=30,  label = "FSRs", cmap='viridis_r')
+    plt.scatter(jet_etas, jet_phis, c=jet_pts, alpha=0.5, s=400,  label = "jets" if jets_level == 'reco' else 'truth jets', cmap='viridis_r')
 
     for ijet in range(len(jets)):
-      if not ijet:
-        ax.add_patch(plt.Circle((jet_etas[ijet], jet_phis[ijet]), 0.4, color='k', fill = False, linestyle='dashed', alpha=0.5, label='R = 0.4'))
-      else:
-        ax.add_patch(plt.Circle((jet_etas[ijet], jet_phis[ijet]), 0.4, color='k', fill = False, linestyle='dashed', alpha=0.5))
+        if not ijet:
+            ax.add_patch(plt.Circle((jet_etas[ijet], jet_phis[ijet]), 0.4, color='k', fill = False, linestyle='dashed', alpha=0.5, label='R = 0.4'))
+        else:
+            ax.add_patch(plt.Circle((jet_etas[ijet], jet_phis[ijet]), 0.4, color='k', fill = False, linestyle='dashed', alpha=0.5))
 
     plt.xlim([-4, 4])
     plt.ylim([-np.pi, np.pi])
@@ -271,6 +278,83 @@ def make_event_display(event_number, jets, quarks, fsrs):
 
     cbar = plt.colorbar()
     cbar.set_label('pT [GeV]')
+    plt.legend()
+    fig.tight_layout()
+
+    plt.savefig(out_name)
+
+
+def make_event_display_grouped(event_number, jets, quarks):
+    # output file name
+    out_name = f'Plots/event_display_{event_number}_grouped.pdf'
+
+    # prepare jet data
+    jet_pts = np.array([jet.Pt() for jet in jets])
+    jet_etas = np.array([jet.Eta() for jet in jets])
+    jet_phis = np.array([jet.Phi() for jet in jets])
+
+    gluino_barcodes = list(set([quark.get_gluino_barcode() for quark in quarks]))
+    neutralino_barcodes = list(set([quark.get_neutralino_barcode() for quark in quarks if quark.get_neutralino_barcode() != -999]))
+
+    # get quarks from each gluinos
+    quarks_from_gluinos_pts = {barcode: [] for barcode in gluino_barcodes}
+    quarks_from_gluinos_etas = {barcode: [] for barcode in gluino_barcodes}
+    quarks_from_gluinos_phis = {barcode: [] for barcode in gluino_barcodes}
+    for quark in quarks:
+        neutralino_barcode = quark.get_neutralino_barcode()
+        if neutralino_barcode == -999:
+            gluino_barcode = quark.get_gluino_barcode()
+            quarks_from_gluinos_pts[gluino_barcode].append(quark.Pt())
+            quarks_from_gluinos_etas[gluino_barcode].append(quark.Eta())
+            quarks_from_gluinos_phis[gluino_barcode].append(quark.Phi())
+    for barcode in gluino_barcodes:
+        quarks_from_gluinos_pts[barcode] = np.array(quarks_from_gluinos_pts[barcode])
+        quarks_from_gluinos_etas[barcode] = np.array(quarks_from_gluinos_etas[barcode])
+        quarks_from_gluinos_phis[barcode] = np.array(quarks_from_gluinos_phis[barcode])
+
+    # get quarks from each neutralino
+    quarks_from_neutralinos_pts = {barcode: [] for barcode in neutralino_barcodes}
+    quarks_from_neutralinos_etas = {barcode: [] for barcode in neutralino_barcodes}
+    quarks_from_neutralinos_phis = {barcode: [] for barcode in neutralino_barcodes}
+    for quark in quarks:
+        neutralino_barcode = quark.get_neutralino_barcode()
+        if neutralino_barcode != -999:
+            quarks_from_neutralinos_pts[neutralino_barcode].append(quark.Pt())
+            quarks_from_neutralinos_etas[neutralino_barcode].append(quark.Eta())
+            quarks_from_neutralinos_phis[neutralino_barcode].append(quark.Phi())
+    for barcode in neutralino_barcodes:
+        quarks_from_neutralinos_pts[barcode] = np.array(quarks_from_neutralinos_pts[barcode])
+        quarks_from_neutralinos_etas[barcode] = np.array(quarks_from_neutralinos_etas[barcode])
+        quarks_from_neutralinos_phis[barcode] = np.array(quarks_from_neutralinos_phis[barcode])
+
+    colors = ['red', 'green', 'orange', 'cyan']
+
+    # make figure
+    fig, ax = plt.subplots()
+
+    color_counter = -1
+    for barcode in gluino_barcodes:
+        color_counter += 1
+        plt.scatter(quarks_from_gluinos_etas[barcode], quarks_from_gluinos_phis[barcode], c = colors[color_counter], s=50,  label = "quarks from g", cmap='viridis_r')
+    for barcode in neutralino_barcodes:
+        color_counter += 1
+        plt.scatter(quarks_from_neutralinos_etas[barcode], quarks_from_neutralinos_phis[barcode], c = colors[color_counter], marker = 'P', s=50,  label = "quarks from n", cmap='viridis_r')
+    plt.scatter(jet_etas, jet_phis, c='blue', alpha=0.5, s=400,  label = "jets", cmap='viridis_r')
+
+    for ijet in range(len(jets)):
+        if not ijet:
+            ax.add_patch(plt.Circle((jet_etas[ijet], jet_phis[ijet]), 0.4, color='k', fill = False, linestyle='dashed', alpha=0.5, label='R = 0.4'))
+        else:
+            ax.add_patch(plt.Circle((jet_etas[ijet], jet_phis[ijet]), 0.4, color='k', fill = False, linestyle='dashed', alpha=0.5))
+
+    plt.xlim([-4, 4])
+    plt.ylim([-np.pi, np.pi])
+
+    ax.set_xlabel(r'$\eta$')
+    ax.set_ylabel(r'$\phi$')
+    ax.set_title('eventNumber = {}'.format(event_number))
+    ax.legend()
+
     plt.legend()
     fig.tight_layout()
 
@@ -495,6 +579,18 @@ def process_files(settings):
                   FSRs[iFSR].set_quark_barcode(
                       tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR])
 
+            # Get nuetralinos
+            if signal_model == '2x5':
+                nNeutralinos = len(tree.truth_NeutralinoFromGluino_pt)
+                neutralinos = [RPVParton() for i in range(nNeutralinos)]
+                for iNeutralino in range(nNeutralinos):
+                      neutralinos[iNeutralino].SetPtEtaPhiE(tree.truth_NeutralinoFromGluino_pt[iNeutralino], tree.truth_NeutralinoFromGluino_eta[iNeutralino],
+                                                     tree.truth_NeutralinoFromGluino_phi[iNeutralino], tree.truth_NeutralinoFromGluino_e[iNeutralino])
+                      neutralinos[iNeutralino].set_barcode(
+                          tree.truth_NeutralinoFromGluino_barcode[iNeutralino])
+                      neutralinos[iNeutralino].set_gluino_barcode(
+                          tree.truth_NeutralinoFromGluino_ParentBarcode[iNeutralino])
+
             # Add quarks from neutralinos
             log.debug('Adding quarks from neutralinos')
             for iquark in range(nQuarksFromGs, nQuarks):
@@ -503,12 +599,22 @@ def process_files(settings):
                 quark_eta = tree.truth_QuarkFromNeutralino_eta[index]
                 quark_phi = tree.truth_QuarkFromNeutralino_phi[index]
                 quark_e = tree.truth_QuarkFromNeutralino_e[index]
-                quark_parent_barcode = tree.truth_QuarkFromNeutralino_ParentBarcode[index]
+                quark_neutralino_barcode = tree.truth_QuarkFromNeutralino_ParentBarcode[index]
+                # Find parent gluino barcode
+                neutralino_found = False
+                for neutralino in neutralinos:
+                    if neutralino.get_barcode() == quark_neutralino_barcode:
+                        neutralino_found = True
+                        quark_gluino_barcode = neutralino.get_gluino_barcode()
+                if not neutralino_found:
+                    log.fatal(f'Corresponding neutralino not found for quark {iquark} not found, exiting')
+                    sys.exit(1)
                 quark_barcode = tree.truth_QuarkFromNeutralino_barcode[index]
                 quark_pdgid = tree.truth_QuarkFromNeutralino_pdgID[index]
                 Quarks += [RPVParton()]
                 Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
-                Quarks[iquark].set_gluino_barcode(quark_parent_barcode)
+                Quarks[iquark].set_gluino_barcode(quark_gluino_barcode)
+                Quarks[iquark].set_neutralino_barcode(quark_neutralino_barcode)
                 Quarks[iquark].set_barcode(quark_barcode)
                 Quarks[iquark].set_pdgid(quark_pdgid)
 
@@ -538,7 +644,20 @@ def process_files(settings):
 
             # Create event display
             if settings['doEventDisplays']:
-                make_event_display(tree.eventNumber, SelectedJets, Quarks, [] if not settings['useFSRs'] else FSRs)
+                make_event_display_pt_ranked(
+                    tree.eventNumber,
+                    {'jets': SelectedJets, 'level': 'reco'},
+                    Quarks,
+                    [] if not settings['useFSRs'] else FSRs)
+                make_event_display_grouped(tree.eventNumber, SelectedJets, Quarks)
+                # get truth jets
+                truth_jets = []
+                for ijet in range(len(tree.truth_jet_pt)):
+                    if tree.truth_jet_pt[ijet] > settings['minJetPt']:
+                        jet = RPVJet()
+                        jet.SetPtEtaPhiE(tree.truth_jet_pt[ijet], tree.truth_jet_eta[ijet], tree.truth_jet_phi[ijet], tree.truth_jet_e[ijet])
+                        truth_jets.append(jet)
+                make_event_display_pt_ranked(tree.eventNumber, {'jets': truth_jets, 'level': 'truth'}, Quarks)
 
             # Match reco jets to closest parton
             matcher = RPVMatcher(Jets = SelectedJets, Partons = Quarks)
