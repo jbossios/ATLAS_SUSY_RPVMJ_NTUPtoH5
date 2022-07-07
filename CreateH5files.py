@@ -50,6 +50,7 @@ def main():
     parser.add_argument('--doOverwrite', action="store_true", help="Overwrite already existing files")
     parser.add_argument('--useOldMCEvtWeightBranch', action="store_true", default=False, help="Use mcEventWeight instead of mcEventWeightsVector")
     parser.add_argument('--doEventDisplays', action="store_true", default=False, help="Create event displays (only done if matching is performed)")
+    parser.add_argument('--nominalOnly', action="store_true", default=False, help="Process only nominal TTree (off by default)")
     args = parser.parse_args()
 
     if args.debug:
@@ -75,6 +76,8 @@ def main():
     # get list of ttrees using the first input file
     f = ROOT.TFile(input_files[0])
     treeNames = [key.GetName() for key in list(f.GetListOfKeys()) if "trees" in key.GetName()]
+    if args.nominalOnly:
+        treeNames = ['trees_SRRPV_']
     f.Close()
 
     # prepare outdir
@@ -345,7 +348,8 @@ def process_files(settings):
             if tree.jet_pt[ijet] > settings['minJetPt']:
                 jet = RPVJet()
                 jet.SetPtEtaPhiE(tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
-                jet.set_qgtagger_bdt(tree.jet_JetQGTaggerBDT_score[ijet]) #tree.jet_QGTagger_bdt[ijet])
+                if tree.FindBranch('jet_JetQGTaggerBDT_score'):
+                    jet.set_qgtagger_bdt(tree.jet_JetQGTaggerBDT_score[ijet]) #tree.jet_QGTagger_bdt[ijet])
                 if settings['do_matching'] and settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
                     jet.set_matched_parton_barcode(int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
                     jet.set_matched_fsr_barcode(int(tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]))
