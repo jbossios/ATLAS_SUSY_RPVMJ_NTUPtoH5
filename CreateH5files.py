@@ -828,6 +828,8 @@ def combine_h5(inFileList, outDir, version):
     outFileName = ""
     if any([i for i in list(range(504513,504552+1)) if str(i) in inFileList[0]]):
         outFileName = "gg_rpv"
+    elif any([i for i in list(range(512804,512947+1)) if str(i) in inFileList[0]]):
+        outFileName = "gg_rpv_viaN1"
     elif any([i for i in list(range(364700,364712+1)) if str(i) in inFileList[0]]):
         outFileName = "jetjet_JZWithSW"
     elif "data" in inFileList[0]:
