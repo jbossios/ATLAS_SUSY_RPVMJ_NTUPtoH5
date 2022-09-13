@@ -20,7 +20,7 @@ def main():
 	eff = []
 	for file in files: 
 		# get dsid
-		dsid = os.path.basename(file).split(".")[2]
+		dsid = int(os.path.basename(file).split(".")[2])
 		# load file and gluinos
 		x = h5py.File(file, "r")
 		# determine quark list
@@ -40,6 +40,11 @@ def main():
 	# convert to matrix
 	eff = np.array(eff)
 	print(eff.shape)
+
+	# save to file
+	outFileName = os.path.join(ops.outDir, f"eff_2x{len(qs)}.h5")
+	with h5py.File(outFileName, 'w') as hf:
+		hf.create_dataset('eff', data=eff)
 
 def options():
     parser = argparse.ArgumentParser(usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
