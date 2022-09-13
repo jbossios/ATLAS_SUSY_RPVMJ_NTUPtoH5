@@ -107,6 +107,7 @@ def plot(dsidList, effFile):
     # make plot
     for iE, name in [(1,"Full"), (2,"Partial"), (3, "None")]:
         low = 1e-6
+        print(eff[:,iE].flatten())
         hist, xbins, ybins, im = plt.hist2d(x, y, bins=[x_bins,y_bins], weights=eff[:,iE].flatten() + low, cmap=plt.cm.Blues, vmin=0, vmax=1)
 
         # add text to used bins
