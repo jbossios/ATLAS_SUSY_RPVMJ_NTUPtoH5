@@ -51,7 +51,8 @@ def main():
         g2p[mask] = 0
         gp = np.stack([g1p,g2p],1).sum(2)
         gm = np.sqrt(gp[:,:,0]**2 - gp[:,:,1]**2 - gp[:,:,2]**2 - gp[:,:,3]**2)
-
+        plt.hist(gm.flatten(),bins=np.linspace(0,4000,50),histtype="step");plt.show()
+        
         # -1 indicates a missing match
         g1 = (g1==-1).sum(-1)
         g2 = (g2==-1).sum(-1)
