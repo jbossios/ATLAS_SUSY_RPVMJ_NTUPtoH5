@@ -18,6 +18,7 @@ def main():
     if ops.plot:
         if "viaN1" in ops.dsidList:
             plot2x5(ops.dsidList, ops.inFile, ops.outDir)
+            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir)
         else:
             plot2x3(ops.dsidList, ops.inFile, ops.outDir)
         return
@@ -182,6 +183,64 @@ def plot2x5(dsidList, effFile, outDir):
 
     if "/eos/home-a/abadea/" in outDir:
         print(f"Saved to https://cernbox.cern.ch/index.php/apps/files/?dir={outDir.split('/eos/home-a/abadea')[-1]}&")
+
+def plot2x5masses(dsidList, effFile, outDir):
+
+    x = h5py.File(effFile,"r")
+
+    # parse dsid lists
+    with open(dsidList, "r") as f:
+        lines = f.readlines()
+        lines = [line.rstrip() for line in lines]
+        dsids = {}
+        for line in lines:
+            split = line.split(".")
+            dsid = int(split[1])
+            gluino_mass = int(split[2].split("_")[5])
+            neutralino_mass = int(split[2].split("_")[6])
+            dsids[dsid] = [gluino_mass, neutralino_mass]
+    gm = [i[1][0] for i in dsids.items()]
+    mi = [int(gm.count(i)/2) for i in sorted(set(gm))]
+
+    i = 0
+    for dname in ["UDB", "UDS"]:
+        nRow, nCol = 13, 8
+        sRow, sCol = 24, 14
+        fig, axs = plt.subplots(nRow, nCol, figsize=(sRow, sCol), sharex=True, sharey=True)
+        fig.subplots_adjust(wspace=0, hspace=0)
+        for col, nRows in enumerate(mi):
+            for j in range(len(axs)): #nRows):
+
+                ax = axs[12-j][col]
+                # handle xticks
+                ax.set_xticks([1,2,3])
+                # handle yticks
+                ax.set_ylim(0,0.3)
+                ax.set_yticks([0.1,0.2])
+                ax.minorticks_on()
+                ax.tick_params(axis='both', which='major', labelsize=14, direction="in")
+                ax.tick_params(axis='both', which='minor', bottom=True, labelsize=8, direction="in")
+
+                if j < nRows:
+                    X = x['masses'][i][x['masses'][i]!=0].flatten() / 1000 # in TeV
+                    n, bins, patches = ax.hist( X, bins=np.linspace(0,3,50), histtype="step", density=False, weights=[1./X.shape[0]]*X.shape[0])
+                    mg, mchi = dsids[int(x['eff'][i][0])]
+                    mg, mchi = mg/1000, mchi/1000 
+                    eff = x['eff'][i][1] + x['eff'][i][2]
+                    ax.text(0.01, 0.25, rf"$m_\tilde{{g}}$ = {mg}, $m_\chi$ = {mchi} TeV, $\epsilon$ = {eff:.3f}", color="black", ha="left", va="center", fontsize=8.5)
+                    i+=1
+
+
+        fig.text(0.5, 0.06, 'Reconstructed Gluino Mass [TeV]', ha='center', fontsize=25)
+        fig.text(0.09, 0.5, f'Fraction of Gluinos [{dname}]', va='center', rotation='vertical', fontsize=25)
+
+        fig.text(0.175, 0.86, r"Jet $\mathrm{p}_{\mathrm{T}}$ > 20 GeV", color="black", ha="center", va="center", fontsize=15)
+        fig.text(0.175, 0.84, r"10 < NJets $\leq$ 15", color="black", ha="center", va="center", fontsize=15)
+
+        outFileName = os.path.join(outDir, f"mass_2x5_{dname}.pdf")
+        plt.savefig(outFileName, bbox_inches='tight')
+        plt.clf()
+
 
 def plot2x3(dsidList, effFile, outDir):
     print("Fill me in")
