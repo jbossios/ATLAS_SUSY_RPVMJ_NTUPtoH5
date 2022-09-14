@@ -35,6 +35,23 @@ def main():
         qs = [i for i in list(x['g1'].keys()) if 'q' in i]
         g1 = np.stack([x[f'g1/{i}'] for i in qs],-1)
         g2 = np.stack([x[f'g2/{i}'] for i in qs],-1)
+        
+        # compute masses
+        p = np.stack([x[f'source/{i}'] for i in ['eta','mass','phi','pt']],-1)
+        pz = p[:,:,3] * np.sinh(p[:,:,0])
+        py = p[:,:,3] * np.sin(p[:,:,2])
+        px = p[:,:,3] * np.cos(p[:,:,2])
+        e = np.sqrt(p[:,:,1]**2 + px**2 + py**2 + pz**2)
+        p = np.stack([e,px,py,pz],-1)
+        g1p = np.take_along_axis(p,np.expand_dims(g1,-1).repeat(4,-1),1)
+        mask = (np.expand_dims(g1,-1).repeat(4,-1) == -1)
+        g1p[mask] = 0
+        g2p = np.take_along_axis(p,np.expand_dims(g2,-1).repeat(4,-1),1)
+        mask = (np.expand_dims(g2,-1).repeat(4,-1) == -1)
+        g2p[mask] = 0
+        gp = np.stack([g1p,g2p],1).sum(2)
+        gm = np.sqrt(gp[:,:,0]**2 - gp[:,:,1]**2 - gp[:,:,2]**2 - gp[:,:,3]**2)
+
         # -1 indicates a missing match
         g1 = (g1==-1).sum(-1)
         g2 = (g2==-1).sum(-1)
@@ -117,10 +134,14 @@ def plot2x5(dsidList, effFile, outDir):
         x_bins = [ 900, 1100, 1300, 1500, 1700, 1900, 2100, 2300, 2500]
         y_bins = np.linspace(0,2400,49) - 25
 
-        for iE, name in [(1,"Full"), (2,"Partial"), (3, "None")]:
+        for iE, name in [(1,"Full"), (2,"Partial"), (3, "None"), ([1,2],"Full+Partial")]:
             low = 1e-6
             # print(eff[:,iE].flatten())
-            hist, xbins, ybins, im = plt.hist2d(x, y, bins=[x_bins,y_bins], weights=eff[:,iE].flatten() + low, cmap=plt.cm.Blues, vmin=0, vmax=1)
+            if isinstance(iE, int):
+                weights = eff[:,iE].flatten() + low
+            else:
+                weights = eff[:,iE].sum(-1).flatten() + low
+            hist, xbins, ybins, im = plt.hist2d(x, y, bins=[x_bins,y_bins], weights=weights, cmap=plt.cm.Blues, vmin=0, vmax=1)
 
             # add text to used bins
             for i in range(len(ybins)-1):
