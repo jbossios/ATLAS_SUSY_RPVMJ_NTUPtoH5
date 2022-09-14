@@ -84,52 +84,62 @@ def plot(dsidList, effFile):
 
     # load efficiencies file
     with h5py.File(effFile, "r") as f:
-        eff = np.array(f["eff"])
+        effData = np.array(f["eff"])
+    # check that the percentages sum to 1
+    print(effData[:,1:].sum(-1).sum() / effData.shape[0])
 
-    # make grid
-    x, y = [], []
-    for i in eff:
-        dsid = i[0]
-        # fill x (gluino mass) and y (neutralino mass)
-        x.append(dsids[dsid][0])
-        y.append(dsids[dsid][1])
-
-    # make arrays
-    x = np.array(x)
-    y = np.array(y)
-
-    # make grid
-    x_bins = [ 900, 1100, 1300, 1500, 1700, 1900, 2100, 2300, 2500] #np.array(list(sorted(set(x)))) - 100
-    y_bins = np.linspace(0,2400,49) - 25 #np.linspace(0,2500,np.array(list(sorted(set(y)))) - 50
-
-    plt.rcParams["figure.figsize"] = (12,9)
+    udb = effData[effData[:,0] < 512876]
+    uds = effData[effData[:,0] >= 512876]
+    
 
     # make plot
-    for iE, name in [(1,"Full"), (2,"Partial"), (3, "None")]:
-        low = 1e-6
-        print(eff[:,iE].flatten())
-        hist, xbins, ybins, im = plt.hist2d(x, y, bins=[x_bins,y_bins], weights=eff[:,iE].flatten() + low, cmap=plt.cm.Blues, vmin=0, vmax=1)
+    for eff, dname in [(udb, "UDB"), (uds, "UDS")]:
 
-        # add text to used bins
-        for i in range(len(ybins)-1):
-            for j in range(len(xbins)-1):
-                if hist.T[i,j] > low:
-                    # print(xbins[j]+0.5, ybins[i]+0.5, f"{hist.T[i,j]:.2f}")
-                    plt.text(xbins[j]+100, ybins[i]+23, f"{hist.T[i,j]:.4f}", color="black", ha="center", va="center", fontweight="bold", fontsize=11)
+        print(f"Looking at {dname} with {eff.shape[0]} samples.")
 
-        plt.xlabel(r"$\tilde{g}$ mass [TeV]", fontsize=18, labelpad=10)
-        plt.ylabel(r"$\chi$ mass [TeV]", fontsize=18, labelpad=10)
+        # make grid
+        x, y = [], []
+        for i in eff:
+            dsid = i[0]
+            # fill x (gluino mass) and y (neutralino mass)
+            x.append(dsids[dsid][0])
+            y.append(dsids[dsid][1])
 
-        plt.xticks(xbins+100, [(i+100)/1000 for i in xbins], fontsize=14)
-        plt.yticks(list(sorted(set(y))), [i/1000 for i in list(sorted(set(y)))], fontsize=12)
+        # make arrays
+        x = np.array(x)
+        y = np.array(y)
 
-        # show
-        cbar = plt.colorbar()
-        cbar.set_label(f"{name} Matching Efficiency", rotation=270, labelpad=30, fontsize=18)
-        cbar.ax.tick_params(labelsize=14)
+        # make grid
+        x_bins = [ 900, 1100, 1300, 1500, 1700, 1900, 2100, 2300, 2500] #np.array(list(sorted(set(x)))) - 100
+        y_bins = np.linspace(0,2400,49) - 25 #np.linspace(0,2500,np.array(list(sorted(set(y)))) - 50
 
-        plt.grid()
-        plt.show()
+        plt.rcParams["figure.figsize"] = (12,9)
+
+        for iE, name in [(1,"Full"), (2,"Partial"), (3, "None")]:
+            low = 1e-6
+            # print(eff[:,iE].flatten())
+            hist, xbins, ybins, im = plt.hist2d(x, y, bins=[x_bins,y_bins], weights=eff[:,iE].flatten() + low, cmap=plt.cm.Blues, vmin=0, vmax=1)
+
+            # add text to used bins
+            for i in range(len(ybins)-1):
+                for j in range(len(xbins)-1):
+                    if hist.T[i,j] > low:
+                        # print(xbins[j]+0.5, ybins[i]+0.5, f"{hist.T[i,j]:.2f}")
+                        plt.text(xbins[j]+100, ybins[i]+23, f"{hist.T[i,j]:.4f}", color="black", ha="center", va="center", fontweight="bold", fontsize=11)
+
+            plt.xlabel(r"$\tilde{g}$ mass [TeV]", fontsize=18, labelpad=10)
+            plt.ylabel(r"$\chi$ mass [TeV]", fontsize=18, labelpad=10)
+
+            plt.xticks(xbins+100, [(i+100)/1000 for i in xbins], fontsize=14)
+            plt.yticks(list(sorted(set(y))), [i/1000 for i in list(sorted(set(y)))], fontsize=12)
+
+            # show
+            cbar = plt.colorbar()
+            cbar.set_label(f"{name} Gluino Matching Efficiency [{dname}]", rotation=270, labelpad=30, fontsize=18)
+            cbar.ax.tick_params(labelsize=14)
+
+            plt.grid()
+            plt.show()
 
 if __name__ == "__main__":
     main()
