@@ -21,6 +21,10 @@ def main():
             plot2x5masses(ops.dsidList, ops.inFile, ops.outDir)
         else:
             plot2x3(ops.dsidList, ops.inFile, ops.outDir)
+
+        if "/eos/home-a/abadea/" in outDir:
+            print(f"Saved to https://cernbox.cern.ch/index.php/apps/files/?dir={outDir.split('/eos/home-a/abadea')[-1]}&")
+            
         return
 
     files = handleInput(ops.inFile)
@@ -180,9 +184,6 @@ def plot2x5(dsidList, effFile, outDir):
             outFileName = os.path.join(outDir, f"eff_2x5_{dname}_{name}.pdf")
             plt.savefig(outFileName, bbox_inches='tight')
             plt.clf()
-
-    if "/eos/home-a/abadea/" in outDir:
-        print(f"Saved to https://cernbox.cern.ch/index.php/apps/files/?dir={outDir.split('/eos/home-a/abadea')[-1]}&")
 
 def plot2x5masses(dsidList, effFile, outDir):
 
