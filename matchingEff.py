@@ -124,7 +124,8 @@ def plot(dsidList, effFile, outDir):
                 for j in range(len(xbins)-1):
                     if hist.T[i,j] > low:
                         # print(xbins[j]+0.5, ybins[i]+0.5, f"{hist.T[i,j]:.2f}")
-                        plt.text(xbins[j]+100, ybins[i]+23, f"{hist.T[i,j]:.4f}", color="black", ha="center", va="center", fontweight="bold", fontsize=11)
+                        color = "black" # if hist.T[i,j] < 0.75 else "white"
+                        plt.text(xbins[j]+100, ybins[i]+23, f"{hist.T[i,j]:.4f}", color=color, ha="center", va="center", fontweight="bold", fontsize=11)
 
             plt.xlabel(r"$\tilde{g}$ mass [TeV]", fontsize=18, labelpad=10)
             plt.ylabel(r"$\chi$ mass [TeV]", fontsize=18, labelpad=10)
