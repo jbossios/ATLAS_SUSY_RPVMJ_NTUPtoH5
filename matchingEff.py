@@ -18,7 +18,8 @@ def main():
     if ops.plot:
         if "viaN1" in ops.dsidList:
             plot2x5(ops.dsidList, ops.inFile, ops.outDir)
-            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir)
+            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir, False)
+            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir, True)
         else:
             plot2x3(ops.dsidList, ops.inFile, ops.outDir)
 
@@ -32,6 +33,7 @@ def main():
     # compute efficiencies
     eff = []
     m = []
+    mmask = []
     for file in files: 
         # get dsid
         dsid = int(os.path.basename(file).split(".")[2])
@@ -51,6 +53,8 @@ def main():
         p = np.stack([e,px,py,pz],-1)
         g1p = np.take_along_axis(p,np.expand_dims(g1,-1).repeat(4,-1),1)
         mask = (np.expand_dims(g1,-1).repeat(4,-1) == -1)
+        print(mask.shape)
+        print(((g1!=-1).sum(-1) == len(qs))[:10])
         g1p[mask] = 0
         g2p = np.take_along_axis(p,np.expand_dims(g2,-1).repeat(4,-1),1)
         mask = (np.expand_dims(g2,-1).repeat(4,-1) == -1)
@@ -58,6 +62,9 @@ def main():
         gp = np.stack([g1p,g2p],1).sum(2)
         gm = np.sqrt(gp[:,:,0]**2 - gp[:,:,1]**2 - gp[:,:,2]**2 - gp[:,:,3]**2)
         m.append(gm)
+        mask = np.stack([(g1!=-1).sum(-1) == len(qs), (g2!=-1).sum(-1) == len(qs)],-1)
+        print(gm.shape, mask.shape)
+        mmask.append(mask)
 
         # -1 indicates a missing match
         g1 = (g1==-1).sum(-1)
@@ -75,14 +82,18 @@ def main():
     n = max([i.shape[0] for i in m])
     m = [np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in m]
     m = np.stack(m,0)
+    mmask = [np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in mmask]
+    mmask = np.stack(mmask,0)
     print(eff.shape)
     print(m.shape)
+    print(mmask.shape)
 
     # save to file
     outFileName = os.path.join(ops.outDir, f"eff_2x{len(qs)}.h5")
     with h5py.File(outFileName, 'w') as hf:
         hf.create_dataset('eff', data=eff)
         hf.create_dataset('masses', data=m)
+        hf.create_dataset('mmask', data=mmask)
 
 def options():
     parser = argparse.ArgumentParser(usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -185,7 +196,7 @@ def plot2x5(dsidList, effFile, outDir):
             plt.savefig(outFileName, bbox_inches='tight')
             plt.clf()
 
-def plot2x5masses(dsidList, effFile, outDir):
+def plot2x5masses(dsidList, effFile, outDir, useMask):
 
     x = h5py.File(effFile,"r")
 
@@ -223,7 +234,11 @@ def plot2x5masses(dsidList, effFile, outDir):
                 ax.tick_params(axis='both', which='minor', bottom=True, labelsize=8, direction="in")
 
                 if j < nRows:
-                    X = x['masses'][i][x['masses'][i]!=0].flatten() / 1000 # in TeV
+                    X = x['masses'][i][x['masses'][i]!=0] / 1000 # in TeV
+                    if useMask:
+                        X = X[x['mmask'][i][x['masses'][i]!=0]]
+                    else:
+                        X = X.flatten()
                     n, bins, patches = ax.hist( X, bins=np.linspace(0,3,50), histtype="step", density=False, weights=[1./X.shape[0]]*X.shape[0])
                     mg, mchi = dsids[int(x['eff'][i][0])]
                     mg, mchi = mg/1000, mchi/1000 
@@ -238,7 +253,7 @@ def plot2x5masses(dsidList, effFile, outDir):
         fig.text(0.175, 0.86, r"Jet $\mathrm{p}_{\mathrm{T}}$ > 20 GeV", color="black", ha="center", va="center", fontsize=15)
         fig.text(0.175, 0.84, r"10 < NJets $\leq$ 15", color="black", ha="center", va="center", fontsize=15)
 
-        outFileName = os.path.join(outDir, f"mass_2x5_{dname}.pdf")
+        outFileName = os.path.join(outDir, f"mass_2x5_{dname}_mask{int(useMask)}.pdf")
         plt.savefig(outFileName, bbox_inches='tight')
         plt.clf()
 
