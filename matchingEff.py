@@ -79,6 +79,7 @@ def main():
     outFileName = os.path.join(ops.outDir, f"eff_2x{len(qs)}.h5")
     with h5py.File(outFileName, 'w') as hf:
         hf.create_dataset('eff', data=eff)
+        hf.create_dataset('masses', data=m)
 
 def options():
     parser = argparse.ArgumentParser(usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
