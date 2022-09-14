@@ -15,8 +15,12 @@ def main():
 
     ops = options()
 
-    plot(ops.dsidList, ops.inFile, ops.outDir)
-    exit()
+    if ops.plot:
+        if "viaN1" in ops.dsidList:
+            plot2x5(ops.dsidList, ops.inFile, ops.outDir)
+        else:
+            plot2x3(ops.dsidList, ops.inFile, ops.outDir)
+        return
 
     files = handleInput(ops.inFile)
 
@@ -55,6 +59,7 @@ def options():
     parser.add_argument("-i", "--inFile", default=None, help="Input file")
     parser.add_argument("-o", "--outDir", default="./", help="Output directory")
     parser.add_argument("-d", "--dsidList", default=None, help="List of files with dsid's")
+    parser.add_argument("-p", "--plot", action="store_true")
     return parser.parse_args()
 
 def handleInput(data):
@@ -68,7 +73,7 @@ def handleInput(data):
         return sorted(glob.glob(data))
     return []
 
-def plot(dsidList, effFile, outDir):
+def plot2x5(dsidList, effFile, outDir):
 
     # parse dsid lists
     with open(dsidList, "r") as f:
@@ -85,8 +90,6 @@ def plot(dsidList, effFile, outDir):
     # load efficiencies file
     with h5py.File(effFile, "r") as f:
         effData = np.array(f["eff"])
-    # check that the percentages sum to 1
-    print(effData[:,1:].sum(-1).sum() / effData.shape[0])
 
     udb = effData[effData[:,0] < 512876]
     uds = effData[effData[:,0] >= 512876]
@@ -111,8 +114,8 @@ def plot(dsidList, effFile, outDir):
         y = np.array(y)
 
         # make grid
-        x_bins = [ 900, 1100, 1300, 1500, 1700, 1900, 2100, 2300, 2500] #np.array(list(sorted(set(x)))) - 100
-        y_bins = np.linspace(0,2400,49) - 25 #np.linspace(0,2500,np.array(list(sorted(set(y)))) - 50
+        x_bins = [ 900, 1100, 1300, 1500, 1700, 1900, 2100, 2300, 2500]
+        y_bins = np.linspace(0,2400,49) - 25
 
         for iE, name in [(1,"Full"), (2,"Partial"), (3, "None")]:
             low = 1e-6
@@ -143,7 +146,9 @@ def plot(dsidList, effFile, outDir):
             outFileName = os.path.join(outDir, f"eff_2x5_{dname}_{name}.pdf")
             plt.savefig(outFileName, bbox_inches='tight')
             plt.clf()
-            # plt.show()
+
+def plot2x3(dsidList, effFile, outDir):
+    print("Fill me in")
 
 if __name__ == "__main__":
     main()
