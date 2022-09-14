@@ -26,6 +26,7 @@ def main():
 
     # compute efficiencies
     eff = []
+    m = []
     for file in files: 
         # get dsid
         dsid = int(os.path.basename(file).split(".")[2])
@@ -51,8 +52,10 @@ def main():
         g2p[mask] = 0
         gp = np.stack([g1p,g2p],1).sum(2)
         gm = np.sqrt(gp[:,:,0]**2 - gp[:,:,1]**2 - gp[:,:,2]**2 - gp[:,:,3]**2)
-        plt.hist(gm.flatten(),bins=np.linspace(0,4000,50),histtype="step");plt.show()
-        
+        m.append(gm)
+
+        # plt.hist(gm.flatten(),bins=np.linspace(0,4000,50),histtype="step");plt.show()
+
         # -1 indicates a missing match
         g1 = (g1==-1).sum(-1)
         g2 = (g2==-1).sum(-1)
@@ -65,7 +68,9 @@ def main():
 
     # convert to matrix
     eff = np.array(eff)
+    m = np.stack(m,0)
     print(eff.shape)
+    print(m.shape)
 
     # save to file
     outFileName = os.path.join(ops.outDir, f"eff_2x{len(qs)}.h5")
