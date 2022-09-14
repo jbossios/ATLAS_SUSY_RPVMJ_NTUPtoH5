@@ -15,7 +15,7 @@ def main():
 
     ops = options()
 
-    plot(ops.dsidList, ops.inFile)
+    plot(ops.dsidList, ops.inFile, ops.outDir)
     exit()
 
     files = handleInput(ops.inFile)
@@ -68,7 +68,7 @@ def handleInput(data):
         return sorted(glob.glob(data))
     return []
 
-def plot(dsidList, effFile):
+def plot(dsidList, effFile, outDir):
 
     # parse dsid lists
     with open(dsidList, "r") as f:
@@ -91,6 +91,7 @@ def plot(dsidList, effFile):
     udb = effData[effData[:,0] < 512876]
     uds = effData[effData[:,0] >= 512876]
     
+    plt.rcParams["figure.figsize"] = (12,9)
 
     # make plot
     for eff, dname in [(udb, "UDB"), (uds, "UDS")]:
@@ -112,8 +113,6 @@ def plot(dsidList, effFile):
         # make grid
         x_bins = [ 900, 1100, 1300, 1500, 1700, 1900, 2100, 2300, 2500] #np.array(list(sorted(set(x)))) - 100
         y_bins = np.linspace(0,2400,49) - 25 #np.linspace(0,2500,np.array(list(sorted(set(y)))) - 50
-
-        plt.rcParams["figure.figsize"] = (12,9)
 
         for iE, name in [(1,"Full"), (2,"Partial"), (3, "None")]:
             low = 1e-6
@@ -139,7 +138,11 @@ def plot(dsidList, effFile):
             cbar.ax.tick_params(labelsize=14)
 
             plt.grid()
-            plt.show()
+
+            outFileName = os.path.join(outDir, f"eff_2x5_{dname}_{name}.pdf")
+            plt.savefig(outFileName, bbox_inches='tight')
+            plt.clf()
+            # plt.show()
 
 if __name__ == "__main__":
     main()
