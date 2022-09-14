@@ -70,7 +70,7 @@ def main():
     eff = np.array(eff)
     # save masses
     n = max([i.shape[0] for i in m])
-    m = [np.pad(i, [(n-i.shape[0],0),(0,0)])]
+    m = [np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in m]
     m = np.stack(m,0)
     print(eff.shape)
     print(m.shape)
