@@ -168,6 +168,9 @@ def plot2x5(dsidList, effFile, outDir):
             plt.savefig(outFileName, bbox_inches='tight')
             plt.clf()
 
+    if "/eos/home-a/abadea/" in outDir:
+        print(f"Saved to https://cernbox.cern.ch/index.php/apps/files/?dir={outDir.split('/eos/home-a/abadea')[-1]}&")
+
 def plot2x3(dsidList, effFile, outDir):
     print("Fill me in")
 
