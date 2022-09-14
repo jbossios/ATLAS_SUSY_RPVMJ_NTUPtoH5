@@ -166,7 +166,7 @@ def plot2x5(dsidList, effFile, outDir):
 
             # add selection text
             plt.text(xbins[1]+100, ybins[-4], r"Jet $\mathrm{p}_{\mathrm{T}}$ > 20 GeV", color="black", ha="center", va="center", fontsize=15)
-            plt.text(xbins[1]+100, ybins[-4] - 100, r"10 $\leq$ NJets $\leq$ 15", color="black", ha="center", va="center", fontsize=15)
+            plt.text(xbins[1]+100, ybins[-4] - 100, r"10 < NJets $\leq$ 15", color="black", ha="center", va="center", fontsize=15)
 
             outFileName = os.path.join(outDir, f"eff_2x5_{dname}_{name}.pdf")
             plt.savefig(outFileName, bbox_inches='tight')
