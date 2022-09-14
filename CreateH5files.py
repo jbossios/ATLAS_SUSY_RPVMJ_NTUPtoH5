@@ -553,7 +553,7 @@ def process_files(settings):
                 quark_e = tree.truth_QuarkFromGluino_e[iquark]
                 quark_parent_barcode = tree.truth_QuarkFromGluino_ParentBarcode[iquark]
                 quark_barcode = tree.truth_QuarkFromGluino_barcode[iquark]
-                quark_pdgid = tree.truth_QuarkFromGluino_pdgID[iquark]
+                quark_pdgid = tree.truth_QuarkFromGluino_pdgId[iquark]
                 Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
                 Quarks[iquark].set_gluino_barcode(quark_parent_barcode)
                 Quarks[iquark].set_barcode(quark_barcode)
@@ -612,7 +612,7 @@ def process_files(settings):
                     log.fatal(f'Corresponding neutralino not found for quark {iquark} not found, exiting')
                     sys.exit(1)
                 quark_barcode = tree.truth_QuarkFromNeutralino_barcode[index]
-                quark_pdgid = tree.truth_QuarkFromNeutralino_pdgID[index]
+                quark_pdgid = tree.truth_QuarkFromNeutralino_pdgId[index]
                 Quarks += [RPVParton()]
                 Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
                 Quarks[iquark].set_gluino_barcode(quark_gluino_barcode)
