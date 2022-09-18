@@ -16,7 +16,7 @@ er.abadea.mc16_13TeV.512*/*.root"
 
 for minJetPt in range(20,50,5):
     for maxNjets in range(11,17):
-        cmd = f"python CreateH5files.py -i '{inFile}' -v 01 --minJetPt {minJetPt} --maxNjets {maxNjets} --minNjets 10 --signalModel 2x5 -o /eos/atlas/atlascerngroupdisk/phys-susy/RPV_mutlijets_ANA-SUSY-2019-24/ntuples/tag/input/mc16e/GG_rpv_viaN1/PROD1/h5/matched/v01/minJetPt{minJetPt}_minNjets10_maxNjets{maxNjets}/ --doOverwrite -j {ops.ncpu}"
+        cmd = f"python CreateH5files.py -i '{inFile}' -v 01 --minJetPt {minJetPt} --maxNjets {maxNjets} --minNjets 10 --signalModel 2x5 -o ./Outputs/2x5/v01/minJetPt{minJetPt}_minNjets10_maxNjets{maxNjets}/ --doOverwrite -j {ops.ncpu}"
         print(cmd)
 
         if not ops.dry:
