@@ -101,6 +101,9 @@ def options():
     parser.add_argument("-o", "--outDir", default="./", help="Output directory")
     parser.add_argument("-d", "--dsidList", default=None, help="List of files with dsid's")
     parser.add_argument("-p", "--plot", action="store_true")
+    parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt")
+    parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
+    parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
     return parser.parse_args()
 
 def handleInput(data):
@@ -115,6 +118,8 @@ def handleInput(data):
     return []
 
 def plot2x5(dsidList, effFile, outDir):
+
+    ops = options()
 
     # parse dsid lists
     with open(dsidList, "r") as f:
@@ -189,14 +194,16 @@ def plot2x5(dsidList, effFile, outDir):
             plt.grid()
 
             # add selection text
-            plt.text(xbins[1]+100, ybins[-4], r"Jet $\mathrm{p}_{\mathrm{T}}$ > 20 GeV", color="black", ha="center", va="center", fontsize=15)
-            plt.text(xbins[1]+100, ybins[-4] - 100, r"10 < NJets $\leq$ 15", color="black", ha="center", va="center", fontsize=15)
+            plt.text(xbins[1]+100, ybins[-4], rf"Jet $\mathrm{{p}}_{{\mathrm{{T}}}}$ > {ops.minJetPt} GeV", color="black", ha="center", va="center", fontsize=15)
+            plt.text(xbins[1]+100, ybins[-4] - 100, rf"{ops.minNjets} < NJets $\leq$ {ops.maxNjets}", color="black", ha="center", va="center", fontsize=15)
 
             outFileName = os.path.join(outDir, f"eff_2x5_{dname}_{name}.pdf")
             plt.savefig(outFileName, bbox_inches='tight')
             plt.clf()
 
 def plot2x5masses(dsidList, effFile, outDir, useMask):
+    
+    ops = options()
 
     x = h5py.File(effFile,"r")
 
@@ -250,8 +257,8 @@ def plot2x5masses(dsidList, effFile, outDir, useMask):
         fig.text(0.5, 0.06, 'Reconstructed Gluino Mass [TeV]', ha='center', fontsize=25)
         fig.text(0.09, 0.5, f'Fraction of Gluinos [{dname}]', va='center', rotation='vertical', fontsize=25)
 
-        fig.text(0.175, 0.86, r"Jet $\mathrm{p}_{\mathrm{T}}$ > 20 GeV", color="black", ha="center", va="center", fontsize=15)
-        fig.text(0.175, 0.84, r"10 < NJets $\leq$ 15", color="black", ha="center", va="center", fontsize=15)
+        fig.text(0.175, 0.86,  rf"Jet $\mathrm{{p}}_{{\mathrm{{T}}}}$ > {ops.minJetPt} GeV", color="black", ha="center", va="center", fontsize=15)
+        fig.text(0.175, 0.84, rf"{ops.minNjets} < NJets $\leq$ {ops.maxNjets}", color="black", ha="center", va="center", fontsize=15)
 
         outFileName = os.path.join(outDir, f"mass_2x5_{dname}_mask{int(useMask)}.pdf")
         plt.savefig(outFileName, bbox_inches='tight')
