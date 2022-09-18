@@ -14,6 +14,9 @@ import matplotlib.pyplot as plt
 def main():
 
     ops = options()
+    
+    if not os.path.isdir(ops.outDir):
+        os.makedirs(ops.outDir)
 
     if ops.plot:
         if "viaN1" in ops.dsidList:
@@ -53,8 +56,8 @@ def main():
         p = np.stack([e,px,py,pz],-1)
         g1p = np.take_along_axis(p,np.expand_dims(g1,-1).repeat(4,-1),1)
         mask = (np.expand_dims(g1,-1).repeat(4,-1) == -1)
-        print(mask.shape)
-        print(((g1!=-1).sum(-1) == len(qs))[:10])
+        #print(mask.shape)
+        #print(((g1!=-1).sum(-1) == len(qs))[:10])
         g1p[mask] = 0
         g2p = np.take_along_axis(p,np.expand_dims(g2,-1).repeat(4,-1),1)
         mask = (np.expand_dims(g2,-1).repeat(4,-1) == -1)
@@ -63,7 +66,7 @@ def main():
         gm = np.sqrt(gp[:,:,0]**2 - gp[:,:,1]**2 - gp[:,:,2]**2 - gp[:,:,3]**2)
         m.append(gm)
         mask = np.stack([(g1!=-1).sum(-1) == len(qs), (g2!=-1).sum(-1) == len(qs)],-1)
-        print(gm.shape, mask.shape)
+        #print(gm.shape, mask.shape)
         mmask.append(mask)
 
         # -1 indicates a missing match
@@ -84,12 +87,13 @@ def main():
     m = np.stack(m,0)
     mmask = [np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in mmask]
     mmask = np.stack(mmask,0)
-    print(eff.shape)
-    print(m.shape)
-    print(mmask.shape)
+    #print(eff.shape)
+    #print(m.shape)
+    #print(mmask.shape)
 
     # save to file
-    outFileName = os.path.join(ops.outDir, f"eff_2x{len(qs)}.h5")
+    outFileName = os.path.join(ops.outDir, f"eff_2x{len(qs)}_minJetPt{ops.minJetPt}_minNjets{ops.minNjets}_maxNjets{ops.maxNjets}.h5")
+    print(f"Saving to {outFileName}")
     with h5py.File(outFileName, 'w') as hf:
         hf.create_dataset('eff', data=eff)
         hf.create_dataset('masses', data=m)
