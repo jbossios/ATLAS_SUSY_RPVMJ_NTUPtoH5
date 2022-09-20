@@ -283,7 +283,8 @@ def efficiencyTable():
     fileList = handleInput(ops.inFile)
 
     table, sels = [], []
-    for f in fileList:
+    for iF, f in enumerate(fileList):
+        print(f"File {iF} / {len(fileList)}")
         sels.append(os.path.basename(f).split("eff_2x5_")[1].split(".h5")[0])
         with h5py.File(f,"r") as hf:
             m = np.array(hf['masses'])
