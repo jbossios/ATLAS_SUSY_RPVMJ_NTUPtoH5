@@ -281,10 +281,10 @@ def efficiencyTable():
 
     ops = options()
     fileList = handleInput(ops.inFile)
-    print(fileList)
 
-    table = []
+    table, sels = [], []
     for f in fileList:
+        sels.append(os.path.basename(f).split("eff_2x5_")[1].split(".h5")[0])
         with h5py.File(f,"r") as hf:
             m = np.array(hf['masses'])
             mmask = np.array(hf['mmask'])
@@ -306,17 +306,23 @@ def efficiencyTable():
 
             # stack 
             stats = np.stack(stats)
-            stats = np.concatenate([eff, stats],1)
+            dsids = eff[:,0]
+            stats = np.concatenate([eff[:,1:], stats],1) # pre-pend efficiencies without dsid
 
             table.append(stats)
 
+    # prepare data
     table = np.stack(table,1)
-    print(table.shape)
+    dt = h5py.special_dtype(vlen=str) 
+    sels = np.array(sels, dtype=dt) 
+    dsids = dsids.astype(int)
 
     # save to file
     outFileName = os.path.join(ops.outDir, f"eff_grid2x5_table.h5")
     with h5py.File(outFileName, 'w') as hf:
-        hf.create_dataset('table', data=table)
+        hf.create_dataset('stats', data=table)
+        hf.create_dataset('dsids', data=dsids)        
+        hf.create_dataset('sels', data=sels)
 
 
 if __name__ == "__main__":
