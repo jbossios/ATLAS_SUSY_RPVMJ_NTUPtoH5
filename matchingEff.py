@@ -10,6 +10,7 @@ import argparse
 import os
 import glob
 import matplotlib.pyplot as plt
+import scipy.stats
 
 def main():
 
@@ -27,6 +28,9 @@ def main():
             print(f"Saved to https://cernbox.cern.ch/index.php/apps/files/?dir={ops.outDir.split('/eos/home-a/abadea')[-1]}&")
 
         return
+
+    if ops.efficiencyTable:
+        return efficiencyTable()
 
     files = handleInput(ops.inFile)
 
@@ -101,6 +105,7 @@ def options():
     parser.add_argument("-o", "--outDir", default="./", help="Output directory")
     parser.add_argument("-d", "--dsidList", default=None, help="List of files with dsid's")
     parser.add_argument("-p", "--plot", action="store_true")
+    parser.add_argument("--efficiencyTable", action="store_true", help="run efficiencyTable function")
     return parser.parse_args()
 
 def handleInput(data):
@@ -261,5 +266,48 @@ def plot2x5masses(dsidList, effFile, outDir, useMask):
 def plot2x3(dsidList, effFile, outDir):
     print("Fill me in")
 
+def efficiencyTable():
+
+    ops = options()
+    fileList = handleInput(ops.inFile)
+    print(fileList)
+
+    table = []
+    for f in fileList:
+        with h5py.File(f,"r") as hf:
+            m = np.array(hf['masses'])
+            mmask = np.array(hf['mmask'])
+            eff = np.array(hf['eff'])
+
+            # will be easier if you loop over the dsids
+            stats = []
+            for i in range(m.shape[0]):
+
+                # apply the mask
+                mt = m[i][mmask[i]]
+                stats.append([
+                    mt.mean(),
+                    np.median(mt),
+                    np.std(mt),
+                    np.sqrt(np.mean(mt**2)), # rms
+                    scipy.stats.iqr(mt)
+                ])
+
+            # stack 
+            stats = np.stack(stats)
+            stats = np.concatenate([eff, stats],1)
+
+            table.append(stats)
+
+    table = np.stack(table,1)
+    print(table.shape)
+
+    # save to file
+    outFileName = os.path.join(ops.outDir, f"eff_grid2x5_table.h5")
+    with h5py.File(outFileName, 'w') as hf:
+        hf.create_dataset('table', data=table)
+
+
 if __name__ == "__main__":
     main()
+    
