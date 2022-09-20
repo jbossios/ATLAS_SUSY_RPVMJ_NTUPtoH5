@@ -323,9 +323,9 @@ def efficiencyTable():
     outFileName = os.path.join(ops.outDir, f"eff_grid2x5_table.h5")
     with h5py.File(outFileName, 'w') as hf:
         hf.create_dataset('table', data=table)
-        hf.create_dataset('dsids', data=dsids)        
-        hf.create_dataset('sels', data=sels)
-        hf.create_dataset('stats', data=stats)
+        hf.create_dataset('dim0_dsids', data=dsids)        
+        hf.create_dataset('dim1_selections', data=sels)
+        hf.create_dataset('dim2_stats', data=stats)
 
 
 if __name__ == "__main__":
