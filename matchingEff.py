@@ -308,6 +308,7 @@ def efficiencyTable():
             # stack 
             stats = np.stack(stats)
             dsids = eff[:,0]
+            eff[:,1] = eff[:,1] + eff[:,2] # set the first value to full+partial for ease of use
             stats = np.concatenate([eff[:,1:], stats],1) # pre-pend efficiencies without dsid
 
             table.append(stats)
@@ -317,7 +318,7 @@ def efficiencyTable():
     dt = h5py.special_dtype(vlen=str) 
     dsids = dsids.astype(int)
     sels = np.array(sels, dtype=dt) 
-    stats = np.array(['full_matching_eff', 'partial_matching_eff', 'no_matching_eff', 'mean','median','std','rms','iqr'], dtype=dt) 
+    stats = np.array(['full_plus_partial_matching_eff', 'partial_matching_eff', 'no_matching_eff', 'mean','median','std','rms','iqr'], dtype=dt) 
 
     # save to file
     outFileName = os.path.join(ops.outDir, f"eff_grid2x5_table.h5")
