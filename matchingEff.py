@@ -282,6 +282,18 @@ def efficiencyTable():
     ops = options()
     fileList = handleInput(ops.inFile)
 
+    # parse dsid lists
+    with open(ops.dsidList, "r") as f:
+        lines = f.readlines()
+        lines = [line.rstrip() for line in lines]
+        dsidMasses = {}
+        for line in lines:
+            split = line.split(".")
+            dsid = int(split[1])
+            gluino_mass = int(split[2].split("_")[5])
+            neutralino_mass = int(split[2].split("_")[6])
+            dsidMasses[dsid] = [gluino_mass, neutralino_mass]
+
     table, sels = [], []
     for iF, f in enumerate(fileList):
         print(f"File {iF} / {len(fileList)}")
@@ -320,6 +332,9 @@ def efficiencyTable():
     sels = np.array(sels, dtype=dt) 
     stats = np.array(['full_plus_partial_matching_eff', 'partial_matching_eff', 'no_matching_eff', 'mean','median','std','rms','iqr'], dtype=dt) 
 
+    # pickup masses
+    masses = np.array([dsidMasses[dsid] for dsid in dsids])
+
     # save to file
     outFileName = os.path.join(ops.outDir, f"eff_grid2x5_table.h5")
     with h5py.File(outFileName, 'w') as hf:
@@ -327,6 +342,7 @@ def efficiencyTable():
         hf.create_dataset('dim0_dsids', data=dsids)        
         hf.create_dataset('dim1_selections', data=sels)
         hf.create_dataset('dim2_stats', data=stats)
+        hf.create_dataset('true_masses', data=masses)
 
 
 if __name__ == "__main__":
