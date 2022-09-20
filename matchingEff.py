@@ -113,6 +113,7 @@ def options():
     parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt")
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
     parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
+    parser.add_argument('--signalModel', default='2x3', type=str, help="Signal model (2x3 or 2x5)")
     return parser.parse_args()
 
 def handleInput(data):
@@ -291,13 +292,16 @@ def efficiencyTable():
             split = line.split(".")
             dsid = int(split[1])
             gluino_mass = int(split[2].split("_")[5])
-            neutralino_mass = int(split[2].split("_")[6])
-            dsidMasses[dsid] = [gluino_mass, neutralino_mass]
+            if ops.signalModel == "2x5":
+                neutralino_mass = int(split[2].split("_")[6])
+                dsidMasses[dsid] = [gluino_mass, neutralino_mass]
+            else:
+                dsidMasses[dsid] = [gluino_mass]
 
     table, sels = [], []
     for iF, f in enumerate(fileList):
         print(f"File {iF} / {len(fileList)}")
-        sels.append(os.path.basename(f).split("eff_2x5_")[1].split(".h5")[0])
+        sels.append(os.path.basename(f).split(f"eff_{ops.signalModel}_")[1].split(".h5")[0])
         with h5py.File(f,"r") as hf:
             m = np.array(hf['masses'])
             mmask = np.array(hf['mmask'])
@@ -336,7 +340,8 @@ def efficiencyTable():
     masses = np.array([dsidMasses[dsid] for dsid in dsids])
 
     # save to file
-    outFileName = os.path.join(ops.outDir, f"eff_grid2x5_table.h5")
+    outFileName = os.path.join(ops.outDir, f"eff_grid{ops.signalModel}_table.h5")
+    print(f"Saving to {outFileName}")
     with h5py.File(outFileName, 'w') as hf:
         hf.create_dataset('table', data=table)
         hf.create_dataset('dim0_dsids', data=dsids)        
