@@ -15,6 +15,9 @@ import scipy.stats
 def main():
 
     ops = options()
+    
+    if not os.path.isdir(ops.outDir):
+        os.makedirs(ops.outDir)
 
     if ops.plot:
         if "viaN1" in ops.dsidList:
@@ -57,8 +60,8 @@ def main():
         p = np.stack([e,px,py,pz],-1)
         g1p = np.take_along_axis(p,np.expand_dims(g1,-1).repeat(4,-1),1)
         mask = (np.expand_dims(g1,-1).repeat(4,-1) == -1)
-        print(mask.shape)
-        print(((g1!=-1).sum(-1) == len(qs))[:10])
+        #print(mask.shape)
+        #print(((g1!=-1).sum(-1) == len(qs))[:10])
         g1p[mask] = 0
         g2p = np.take_along_axis(p,np.expand_dims(g2,-1).repeat(4,-1),1)
         mask = (np.expand_dims(g2,-1).repeat(4,-1) == -1)
@@ -67,7 +70,7 @@ def main():
         gm = np.sqrt(gp[:,:,0]**2 - gp[:,:,1]**2 - gp[:,:,2]**2 - gp[:,:,3]**2)
         m.append(gm)
         mask = np.stack([(g1!=-1).sum(-1) == len(qs), (g2!=-1).sum(-1) == len(qs)],-1)
-        print(gm.shape, mask.shape)
+        #print(gm.shape, mask.shape)
         mmask.append(mask)
 
         # -1 indicates a missing match
@@ -88,12 +91,13 @@ def main():
     m = np.stack(m,0)
     mmask = [np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in mmask]
     mmask = np.stack(mmask,0)
-    print(eff.shape)
-    print(m.shape)
-    print(mmask.shape)
+    #print(eff.shape)
+    #print(m.shape)
+    #print(mmask.shape)
 
     # save to file
-    outFileName = os.path.join(ops.outDir, f"eff_2x{len(qs)}.h5")
+    outFileName = os.path.join(ops.outDir, f"eff_2x{len(qs)}_minJetPt{ops.minJetPt}_minNjets{ops.minNjets}_maxNjets{ops.maxNjets}.h5")
+    print(f"Saving to {outFileName}")
     with h5py.File(outFileName, 'w') as hf:
         hf.create_dataset('eff', data=eff)
         hf.create_dataset('masses', data=m)
@@ -106,6 +110,9 @@ def options():
     parser.add_argument("-d", "--dsidList", default=None, help="List of files with dsid's")
     parser.add_argument("-p", "--plot", action="store_true")
     parser.add_argument("--efficiencyTable", action="store_true", help="run efficiencyTable function")
+    parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt")
+    parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
+    parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
     return parser.parse_args()
 
 def handleInput(data):
@@ -120,6 +127,8 @@ def handleInput(data):
     return []
 
 def plot2x5(dsidList, effFile, outDir):
+
+    ops = options()
 
     # parse dsid lists
     with open(dsidList, "r") as f:
@@ -194,14 +203,16 @@ def plot2x5(dsidList, effFile, outDir):
             plt.grid()
 
             # add selection text
-            plt.text(xbins[1]+100, ybins[-4], r"Jet $\mathrm{p}_{\mathrm{T}}$ > 20 GeV", color="black", ha="center", va="center", fontsize=15)
-            plt.text(xbins[1]+100, ybins[-4] - 100, r"10 < NJets $\leq$ 15", color="black", ha="center", va="center", fontsize=15)
+            plt.text(xbins[1]+100, ybins[-4], rf"Jet $\mathrm{{p}}_{{\mathrm{{T}}}}$ > {ops.minJetPt} GeV", color="black", ha="center", va="center", fontsize=15)
+            plt.text(xbins[1]+100, ybins[-4] - 100, rf"{ops.minNjets} < NJets $\leq$ {ops.maxNjets}", color="black", ha="center", va="center", fontsize=15)
 
             outFileName = os.path.join(outDir, f"eff_2x5_{dname}_{name}.pdf")
             plt.savefig(outFileName, bbox_inches='tight')
             plt.clf()
 
 def plot2x5masses(dsidList, effFile, outDir, useMask):
+    
+    ops = options()
 
     x = h5py.File(effFile,"r")
 
@@ -255,8 +266,8 @@ def plot2x5masses(dsidList, effFile, outDir, useMask):
         fig.text(0.5, 0.06, 'Reconstructed Gluino Mass [TeV]', ha='center', fontsize=25)
         fig.text(0.09, 0.5, f'Fraction of Gluinos [{dname}]', va='center', rotation='vertical', fontsize=25)
 
-        fig.text(0.175, 0.86, r"Jet $\mathrm{p}_{\mathrm{T}}$ > 20 GeV", color="black", ha="center", va="center", fontsize=15)
-        fig.text(0.175, 0.84, r"10 < NJets $\leq$ 15", color="black", ha="center", va="center", fontsize=15)
+        fig.text(0.175, 0.86,  rf"Jet $\mathrm{{p}}_{{\mathrm{{T}}}}$ > {ops.minJetPt} GeV", color="black", ha="center", va="center", fontsize=15)
+        fig.text(0.175, 0.84, rf"{ops.minNjets} < NJets $\leq$ {ops.maxNjets}", color="black", ha="center", va="center", fontsize=15)
 
         outFileName = os.path.join(outDir, f"mass_2x5_{dname}_mask{int(useMask)}.pdf")
         plt.savefig(outFileName, bbox_inches='tight')
