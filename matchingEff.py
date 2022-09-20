@@ -315,15 +315,17 @@ def efficiencyTable():
     # prepare data
     table = np.stack(table,1)
     dt = h5py.special_dtype(vlen=str) 
-    sels = np.array(sels, dtype=dt) 
     dsids = dsids.astype(int)
+    sels = np.array(sels, dtype=dt) 
+    stats = np.array(['mean','median','std','rms','iqr'], dtype=dt) 
 
     # save to file
     outFileName = os.path.join(ops.outDir, f"eff_grid2x5_table.h5")
     with h5py.File(outFileName, 'w') as hf:
-        hf.create_dataset('stats', data=table)
+        hf.create_dataset('table', data=table)
         hf.create_dataset('dsids', data=dsids)        
         hf.create_dataset('sels', data=sels)
+        hf.create_dataset('stats', data=stats)
 
 
 if __name__ == "__main__":
