@@ -34,7 +34,8 @@ def main():
 
     if ops.efficiencyTable:
         return efficiencyTable()
-
+    
+    # handle input files
     files = handleInput(ops.inFile)
 
     # compute efficiencies
@@ -250,7 +251,7 @@ def plot2x5masses(dsidList, effFile, outDir, useMask):
                 ax.tick_params(axis='both', which='major', labelsize=14, direction="in")
                 ax.tick_params(axis='both', which='minor', bottom=True, labelsize=8, direction="in")
 
-                if j < nRows:
+                if j < nRows and i < x['masses'].shape[0]:
                     X = x['masses'][i][x['masses'][i]!=0] / 1000 # in TeV
                     if useMask:
                         X = X[x['mmask'][i][x['masses'][i]!=0]]
