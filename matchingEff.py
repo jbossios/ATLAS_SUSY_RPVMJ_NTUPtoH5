@@ -42,9 +42,7 @@ def main():
         spanet = handleInput(ops.spanet)
 
     # compute efficiencies
-    eff = []
-    m = []
-    mmask = []
+    eff, normweight, m, mmask = [], [], [], []
     for iF, file in enumerate(files): 
         # get dsid
         dsid = int(os.path.basename(file).split(".")[2])
@@ -91,19 +89,21 @@ def main():
         none = np.logical_and(g1!=0, g2!=0).sum() / g1.shape[0]
         print(f"{dsid}: Full ({full:.3f}), Partial ({partial:.3f}), None ({none:.3f})")
         eff.append([dsid, full, partial, none])
+        
+        # get normalization weight
+        normweight.append(np.array(x['EventVars/normweight']))
+
+        # close file
+        x.close()
 
     # convert to matrix
     eff = np.array(eff)
     # save masses
     n = max([i.shape[0] for i in m])
-    m = [np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in m]
-    m = np.stack(m,0)
-    mmask = [np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in mmask]
-    mmask = np.stack(mmask,0)
-    #print(eff.shape)
-    #print(m.shape)
-    #print(mmask.shape)
-
+    m = np.stack([np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in m], 0)
+    mmask = np.stack([np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in mmask], 0)
+    normweight = np.stack([np.pad(i, [(n-i.shape[0],0)]) for i in normweight], 0)
+    
     # save to file
     outFileName = os.path.join(ops.outDir, f"eff_2x{len(qs)}_minJetPt{ops.minJetPt}_minNjets{ops.minNjets}_maxNjets{ops.maxNjets}.h5")
     print(f"Saving to {outFileName}")
@@ -111,6 +111,7 @@ def main():
         hf.create_dataset('eff', data=eff)
         hf.create_dataset('masses', data=m)
         hf.create_dataset('mmask', data=mmask)
+        hf.create_dataset('normweight', data=normweight)
 
 def options():
     parser = argparse.ArgumentParser(usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
