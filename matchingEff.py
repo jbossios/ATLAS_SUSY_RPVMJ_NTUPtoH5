@@ -37,32 +37,40 @@ def main():
     
     # handle input files
     files = handleInput(ops.inFile)
+    # pass in spanet predictions
+    if ops.spanet:
+        spanet = handleInput(ops.spanet)
 
     # compute efficiencies
     eff = []
     m = []
     mmask = []
-    for file in files: 
+    for iF, file in enumerate(files): 
         # get dsid
         dsid = int(os.path.basename(file).split(".")[2])
         # load file and gluinos
         x = h5py.File(file, "r")
+        
         # determine quark list
         qs = [i for i in list(x['g1'].keys()) if 'q' in i]
-        g1 = np.stack([x[f'g1/{i}'] for i in qs],-1)
-        g2 = np.stack([x[f'g2/{i}'] for i in qs],-1)
+        if ops.spanet:
+            with h5py.File(spanet[iF], "r") as hf:
+                g1 = np.stack([hf[f'g1/{i}'] for i in qs],-1)
+                g2 = np.stack([hf[f'g2/{i}'] for i in qs],-1)
+        else:
+            g1 = np.stack([x[f'g1/{i}'] for i in qs],-1)
+            g2 = np.stack([x[f'g2/{i}'] for i in qs],-1)
         
-        # compute masses
+        # get 4-momentum
         p = np.stack([x[f'source/{i}'] for i in ['eta','mass','phi','pt']],-1)
         pz = p[:,:,3] * np.sinh(p[:,:,0])
         py = p[:,:,3] * np.sin(p[:,:,2])
         px = p[:,:,3] * np.cos(p[:,:,2])
         e = np.sqrt(p[:,:,1]**2 + px**2 + py**2 + pz**2)
         p = np.stack([e,px,py,pz],-1)
+
         g1p = np.take_along_axis(p,np.expand_dims(g1,-1).repeat(4,-1),1)
         mask = (np.expand_dims(g1,-1).repeat(4,-1) == -1)
-        #print(mask.shape)
-        #print(((g1!=-1).sum(-1) == len(qs))[:10])
         g1p[mask] = 0
         g2p = np.take_along_axis(p,np.expand_dims(g2,-1).repeat(4,-1),1)
         mask = (np.expand_dims(g2,-1).repeat(4,-1) == -1)
@@ -115,6 +123,7 @@ def options():
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
     parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
     parser.add_argument('--signalModel', default='2x3', type=str, help="Signal model (2x3 or 2x5)")
+    parser.add_argument("-s", "--spanet", default=None, help="Spanet prediction files")
     return parser.parse_args()
 
 def handleInput(data):
@@ -217,6 +226,8 @@ def plot2x5masses(dsidList, effFile, outDir, useMask):
     ops = options()
 
     x = h5py.File(effFile,"r")
+    if ops.spanet:
+        spanet_eff = h5py.File(ops.spanet, "r")
 
     # parse dsid lists
     with open(dsidList, "r") as f:
@@ -257,11 +268,22 @@ def plot2x5masses(dsidList, effFile, outDir, useMask):
                         X = X[x['mmask'][i][x['masses'][i]!=0]]
                     else:
                         X = X.flatten()
-                    n, bins, patches = ax.hist( X, bins=np.linspace(0,3,50), histtype="step", density=False, weights=[1./X.shape[0]]*X.shape[0])
+                    n, bins, patches = ax.hist( X, bins=np.linspace(0,3,50), histtype="step", density=False, weights=[1./X.shape[0]]*X.shape[0], color="blue")
                     mg, mchi = dsids[int(x['eff'][i][0])]
                     mg, mchi = mg/1000, mchi/1000 
                     eff = x['eff'][i][1] + x['eff'][i][2]
                     ax.text(0.01, 0.25, rf"$m_\tilde{{g}}$ = {mg}, $m_\chi$ = {mchi} TeV, $\epsilon$ = {eff:.3f}", color="black", ha="left", va="center", fontsize=8.5)
+                    
+                    # repeat for spanet
+                    if ops.spanet:
+                        X_spanet = spanet_eff['masses'][i][spanet_eff['masses'][i]!=0] / 1000 # in TeV
+                        if useMask:
+                            X_spanet = X_spanet[spanet_eff['mmask'][i][spanet_eff['masses'][i]!=0]]
+                        else:
+                            X_spanet = X_spanet.flatten()
+                        n, bins, patches = ax.hist( X_spanet, bins=np.linspace(0,3,50), histtype="step", density=False, weights=[1./X_spanet.shape[0]]*X_spanet.shape[0], color="red")
+                    
+                    # increment i
                     i+=1
 
 
