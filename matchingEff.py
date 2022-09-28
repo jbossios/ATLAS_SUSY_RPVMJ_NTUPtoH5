@@ -22,8 +22,10 @@ def main():
     if ops.plot:
         if "viaN1" in ops.dsidList:
             plot2x5(ops.dsidList, ops.inFile, ops.outDir)
-            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir, False)
-            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir, True)
+            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir, False, "masses")
+            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir, True, "masses")
+            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir, False, "neutralino_masses")
+            plot2x5masses(ops.dsidList, ops.inFile, ops.outDir, True, "neutralino_masses")
         else:
             plot2x3(ops.dsidList, ops.inFile, ops.outDir)
 
@@ -42,7 +44,7 @@ def main():
         spanet = handleInput(ops.spanet)
 
     # compute efficiencies
-    eff, normweight, m, mmask = [], [], [], []
+    eff, normweight, m, mmask, neum = [], [], [], [], []
     for iF, file in enumerate(files): 
         # get dsid
         dsid = int(os.path.basename(file).split(".")[2])
@@ -66,7 +68,8 @@ def main():
         px = p[:,:,3] * np.cos(p[:,:,2])
         e = np.sqrt(p[:,:,1]**2 + px**2 + py**2 + pz**2)
         p = np.stack([e,px,py,pz],-1)
-
+        
+        # get gluino masses
         g1p = np.take_along_axis(p,np.expand_dims(g1,-1).repeat(4,-1),1)
         mask = (np.expand_dims(g1,-1).repeat(4,-1) == -1)
         g1p[mask] = 0
@@ -77,8 +80,12 @@ def main():
         gm = np.sqrt(gp[:,:,0]**2 - gp[:,:,1]**2 - gp[:,:,2]**2 - gp[:,:,3]**2)
         m.append(gm)
         mask = np.stack([(g1!=-1).sum(-1) == len(qs), (g2!=-1).sum(-1) == len(qs)],-1)
-        #print(gm.shape, mask.shape)
         mmask.append(mask)
+        
+        # if 2x5 get neutralino masses from q3,q4,q5
+        if len(qs) == 5:
+            neup = np.stack([g1p[:,[2,3,4]],g2p[:,[2,3,4]]],1).sum(2)
+            neum.append(np.sqrt(neup[:,:,0]**2 - neup[:,:,1]**2 - neup[:,:,2]**2 - neup[:,:,3]**2))
 
         # -1 indicates a missing match
         g1 = (g1==-1).sum(-1)
@@ -112,6 +119,9 @@ def main():
         hf.create_dataset('masses', data=m)
         hf.create_dataset('mmask', data=mmask)
         hf.create_dataset('normweight', data=normweight)
+        if len(neum):
+            neum = np.stack([np.pad(i, [(n-i.shape[0],0),(0,0)]) for i in neum], 0)
+            hf.create_dataset('neutralino_masses', data=neum)
 
 def options():
     parser = argparse.ArgumentParser(usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -222,7 +232,7 @@ def plot2x5(dsidList, effFile, outDir):
             plt.savefig(outFileName, bbox_inches='tight')
             plt.clf()
 
-def plot2x5masses(dsidList, effFile, outDir, useMask):
+def plot2x5masses(dsidList, effFile, outDir, useMask, masses="masses"):
     
     ops = options()
 
@@ -262,11 +272,11 @@ def plot2x5masses(dsidList, effFile, outDir, useMask):
                 ax.minorticks_on()
                 ax.tick_params(axis='both', which='major', labelsize=14, direction="in")
                 ax.tick_params(axis='both', which='minor', bottom=True, labelsize=8, direction="in")
-
-                if j < nRows and i < x['masses'].shape[0]:
-                    X = x['masses'][i][x['masses'][i]!=0] / 1000 # in TeV
+                
+                if j < nRows and i < x[masses].shape[0]:
+                    X = x[masses][i][x[masses][i]!=0] / 1000 # in TeV
                     if useMask:
-                        X = X[x['mmask'][i][x['masses'][i]!=0]]
+                        X = X[x['mmask'][i][x[masses][i]!=0]]
                     else:
                         X = X.flatten()
                     n, bins, patches = ax.hist( X, bins=np.linspace(0,3,50), histtype="step", density=False, weights=[1./X.shape[0]]*X.shape[0], color="blue")
@@ -277,9 +287,9 @@ def plot2x5masses(dsidList, effFile, outDir, useMask):
                     
                     # repeat for spanet
                     if ops.spanet:
-                        X_spanet = spanet_eff['masses'][i][spanet_eff['masses'][i]!=0] / 1000 # in TeV
+                        X_spanet = spanet_eff[masses][i][spanet_eff[masses][i]!=0] / 1000 # in TeV
                         if useMask:
-                            X_spanet = X_spanet[spanet_eff['mmask'][i][spanet_eff['masses'][i]!=0]]
+                            X_spanet = X_spanet[spanet_eff['mmask'][i][spanet_eff[masses][i]!=0]]
                         else:
                             X_spanet = X_spanet.flatten()
                         n, bins, patches = ax.hist( X_spanet, bins=np.linspace(0,3,50), histtype="step", density=False, weights=[1./X_spanet.shape[0]]*X_spanet.shape[0], color="red")
@@ -287,14 +297,15 @@ def plot2x5masses(dsidList, effFile, outDir, useMask):
                     # increment i
                     i+=1
 
-
-        fig.text(0.5, 0.06, 'Reconstructed Gluino Mass [TeV]', ha='center', fontsize=25)
-        fig.text(0.09, 0.5, f'Fraction of Gluinos [{dname}]', va='center', rotation='vertical', fontsize=25)
+        
+        xtitle = "Gluino" if masses == "masses" else "Neutralino"
+        fig.text(0.5, 0.06, f'Reconstructed {xtitle} Mass [TeV]', ha='center', fontsize=25)
+        fig.text(0.09, 0.5, f'Fraction of {xtitle}s [{dname}]', va='center', rotation='vertical', fontsize=25)
 
         fig.text(0.175, 0.86,  rf"Jet $\mathrm{{p}}_{{\mathrm{{T}}}}$ > {ops.minJetPt} GeV", color="black", ha="center", va="center", fontsize=15)
         fig.text(0.175, 0.84, rf"{ops.minNjets} < NJets $\leq$ {ops.maxNjets}", color="black", ha="center", va="center", fontsize=15)
 
-        outFileName = os.path.join(outDir, f"mass_2x5_{dname}_mask{int(useMask)}.pdf")
+        outFileName = os.path.join(outDir, f"{masses}_2x5_{dname}_mask{int(useMask)}.pdf")
         plt.savefig(outFileName, bbox_inches='tight')
         plt.clf()
 
