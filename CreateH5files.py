@@ -184,26 +184,43 @@ def get_sum_of_weights(file_list):
     return sum_of_weights
 
 
-def get_quark_flavour(quark_labels, pdgid, g, dictionary):
+def get_quark_flavour(quark_labels, pdgid, g, dictionary, match_neutralino, log):
     """ Function that assigns quarks to
     q1, q2 or q3 (q1, q2, q3, q4 or q5) for 2x3 (2x5) model """
     n_quark_labels = len(quark_labels)
-    for qi, qlabel in enumerate(quark_labels, 1):
-        if qi == n_quark_labels:
-            return dictionary, qlabel
-        if dictionary[g][qlabel] == 0:
-            dictionary[g][qlabel] = pdgid
-            return dictionary, qlabel
+    if n_quark_labels == 3:  # 2x3 model
+        log.debug(f'DEBUG: g = {g}')
+        log.debug(f'DEBUG: jet_matched_to_neutralino = {match_neutralino}')
+        for qi, qlabel in enumerate(quark_labels, 1):
+            if qi == n_quark_labels:
+                return dictionary, qlabel
+            if dictionary[g][qlabel] == 0:
+                dictionary[g][qlabel] = pdgid
+                return dictionary, qlabel
+    else:  # 2x5 model
+        n_quark_labels = 2 if not match_neutralino else 3
+        new_quark_labels = {
+          False: ['q1', 'q2'],
+          True: ['q3', 'q4', 'q5'],
+        }[match_neutralino]
+        log.debug(f'DEBUG: g = {g}')
+        log.debug(f'DEBUG: jet_matched_to_neutralino = {match_neutralino}')
+        for qi, qlabel in enumerate(new_quark_labels, 1):
+            if qi == n_quark_labels:
+                return dictionary, qlabel
+            if dictionary[g][qlabel] == 0:
+                dictionary[g][qlabel] = pdgid
+                return dictionary, qlabel
 
 
-def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dict, selected_jets, jet_index):
+def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dict, selected_jets, jet_index, match_neutralino, log):
     """ Find to which gluino (g1 or g2) a jet was matched and determine to which parton qX
     with X=[1, 2, 3] (X=[1, 2, 3, 4, 5]) for the 2x3 (2x5) model
     (see convention on process_files())
     """
     if g_barcodes['g1'] == 0:  # not assigned yet to any quark parent barcode
         g_barcodes['g1'] = q_parent_barcode
-        q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g1', q_pdgid_dict)
+        q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g1', q_pdgid_dict, match_neutralino, log)
         if assigments['g1'][q_flavour] == -1:  # not assigned yet
             assigments['g1'][q_flavour] = jet_index
             assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
@@ -214,7 +231,7 @@ def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgi
     else:  # g1 was defined alredy (check if quark parent barcode agrees with it)
         if g_barcodes['g1'] == q_parent_barcode:
             q_pdgid_dict, q_flavour = get_quark_flavour(
-                quark_labels, pdgid, 'g1', q_pdgid_dict)
+                quark_labels, pdgid, 'g1', q_pdgid_dict, match_neutralino, log)
             if assigments['g1'][q_flavour] == -1:  # not assigned yet
                 assigments['g1'][q_flavour] = jet_index
                 assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
@@ -223,7 +240,7 @@ def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgi
                     assigments['g1'][q_flavour] = jet_index
                     assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
         else:
-            q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g2', q_pdgid_dict)
+            q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g2', q_pdgid_dict, match_neutralino, log)
             if assigments['g2'][q_flavour] == -1:  # not assigned yet
                 assigments['g2'][q_flavour] = jet_index
                 assigments['g2'][q_flavour.replace('q', 'f')] = pdgid
@@ -379,10 +396,16 @@ def process_files(settings):
         NmatchedQuarksByFlavour = {flav: 0 for flav in quark_flavours}
 
         # conventions:
+        # 2x3 signals:
         # q1 is the first matched quark found for the corresponding gluino (f1 is its pdgID)
         # q2 is the second matched quark found for the corresponding gluino (f2 is its pdgID)
         # q3 is the third matched quark found for the corresponding gluino (f3 is its pdgID)
-        # for 2x5 signals, q4 (q5) is the fourth (fifth) matched quark found for the corresponding gluino (f4/f5 are their pdgIDs)
+        # 2x5 signals:
+        # q1 is the first matched quark found for the corresponding gluino (f1 is its pdgID)
+        # q2 is the second matched quark found for the corresponding gluino (f2 is its pdgID)
+        # q3 is the first matched quark found for the corresponding neutralino (f3 is its pdgID)
+        # q4 is the second matched quark found for the corresponding neutralino (f4 is its pdgID)
+        # q5 is the third matched quark found for the corresponding neutralino (f5 is its pdgID)
         # g1 is the first parent gluino for first matched quark
         quark_labels = ['q1', 'q2', 'q3']
         if signal_model == '2x5':
@@ -619,6 +642,7 @@ def process_files(settings):
                 Quarks[iquark].set_neutralino_barcode(quark_neutralino_barcode)
                 Quarks[iquark].set_barcode(quark_barcode)
                 Quarks[iquark].set_pdgid(quark_pdgid)
+                Quarks[iquark].set_is_coming_from_neutralino()
 
             if signal_model == '2x5' and settings['useFSRs']:  # select FSR quarks from neutralinos
                 log.debug('Get FSRs from neutralinos')
@@ -643,6 +667,7 @@ def process_files(settings):
                         tree.truth_FSRFromNeutralinoQuark_barcode[index])
                     FSRs[iFSR].set_quark_barcode(
                         tree.truth_FSRFromNeutralinoQuark_LastNeutralinoInChain_barcode[index])
+                    FSRs[iFSR].set_is_coming_from_neutralino()
 
             # Create event display
             if settings['doEventDisplays']:
@@ -678,7 +703,7 @@ def process_files(settings):
             for jet_index, jet in enumerate(matched_jets):
                 if jet.is_matched():
                     Assigments = make_assigments(quark_labels, Assigments, gBarcodes, jet.get_match_gluino_barcode(
-                    ), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index)
+                    ), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index, jet.is_matched_to_neutralino(), log)
 
             # Check if fully matched
             n_matched_jets = sum(
@@ -701,6 +726,7 @@ def process_files(settings):
             # Count number of at least partially reconstructed events
             if Assigments['g1']['mask'] or Assigments['g2']['mask']:
                 partial_events += 1
+                log.debug('Event is at least partially reconstructed!')
 
             # Check if neutralinos were matched
             if signal_model == '2x5':
