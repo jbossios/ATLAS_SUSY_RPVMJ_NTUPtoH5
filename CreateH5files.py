@@ -51,6 +51,7 @@ def main():
     parser.add_argument('--useOldMCEvtWeightBranch', action="store_true", default=False, help="Use mcEventWeight instead of mcEventWeightsVector")
     parser.add_argument('--doEventDisplays', action="store_true", default=False, help="Create event displays (only done if matching is performed)")
     parser.add_argument('--doSystematics', action="store_true", default=False, help="Process systematic TTrees (off by default)")
+    parser.add_argument('-n', '--normalization_denominator', default=None, help='json library for norm weights.')
     args = parser.parse_args()
 
     if args.debug:
@@ -69,8 +70,13 @@ def main():
         input_files = [i for i in input_files if not any([j for j in args.combineExcludedDSIDs if j in i])]
         return combine_h5(input_files, args.outDir, args.version)
 
-    # get sum of weights
-    sum_of_weights = get_sum_of_weights(input_files)
+    # load normalization denominators
+    if args.normalization_denominator:
+        with open(args.normalization_denominator) as f:
+          sum_of_weights = json.load(f)
+          sum_of_weights = {int(k):float(v) for k,v in sum_of_weights.items()}
+    else:
+        sum_of_weights = get_sum_of_weights(input_files)
     log.info('Sum of weights: {}'.format(sum_of_weights))
 
     # get list of ttrees using the first input file
