@@ -39,6 +39,7 @@ def main():
     
     # handle input files
     files = handleInput(ops.inFile)
+    print(files)
     # pass in spanet predictions
     if ops.spanet:
         spanet = handleInput(ops.spanet)
@@ -47,7 +48,10 @@ def main():
     eff, normweight, m, mmask, neum = [], [], [], [], []
     for iF, file in enumerate(files): 
         # get dsid
-        dsid = int(os.path.basename(file).split(".")[2])
+        try:
+            dsid = int(os.path.basename(file).split(".")[2])
+        except: 
+            dsid = 1
         # load file and gluinos
         x = h5py.File(file, "r")
         
