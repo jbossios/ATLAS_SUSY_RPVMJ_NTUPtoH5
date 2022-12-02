@@ -41,6 +41,8 @@ def main():
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
     parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
     parser.add_argument('--signalModel', default='2x3', type=str, help="Signal model (2x3 or 2x5)")
+    parser.add_argument('--nQuarks', default=6, type=int, help="Number of quarks per gluino. Only used when --allowQuarkReMatches is use. Example: 2 quarks could be the same but matched to two jets)")
+    parser.add_argument('--allowQuarkReMatches', action='store_true', help="Let quarks to be matched to multiple jets")
     parser.add_argument('--shuffleJets', action='store_true', help="Shuffle jets before saving")
     parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority', help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
     parser.add_argument('--doNotUseFSRs', action='store_true', help="Do not consider final state radiation (FSR) in jet-parton matching")
@@ -55,6 +57,11 @@ def main():
 
     if args.debug:
         log.setLevel("DEBUG")
+
+    # Protection
+    if args.signalModel == '2x5' and args.allowQuarkReMatches:
+        log.fatal('2x5 model is not supported with the "allowQuarkReMatches" option, exiting')
+        sys.exit(1)
 
     # get input files and sum of weights
     input_files = handleInput(args.inDir)
@@ -115,6 +122,8 @@ def main():
                 'treeName' : treeName,
                 'doOverwrite' : args.doOverwrite,
                 'signalModel': args.signalModel,
+                'nQuarks': args.nQuarks,
+                'allowQuarkReMatches': args.allowQuarkReMatches,
                 'useOldMCEvtWeightBranch': args.useOldMCEvtWeightBranch,
                 # output settings
                 'outDir': args.outDir,
@@ -184,11 +193,11 @@ def get_sum_of_weights(file_list):
     return sum_of_weights
 
 
-def get_quark_flavour(quark_labels, pdgid, g, dictionary, match_neutralino, log):
+def get_quark_flavour(quark_labels, pdgid, g, dictionary, match_neutralino, model, log):
     """ Function that assigns quarks to
     q1, q2 or q3 (q1, q2, q3, q4 or q5) for 2x3 (2x5) model """
     n_quark_labels = len(quark_labels)
-    if n_quark_labels == 3:  # 2x3 model
+    if model == '2x3':
         log.debug(f'DEBUG: g = {g}')
         log.debug(f'DEBUG: jet_matched_to_neutralino = {match_neutralino}')
         for qi, qlabel in enumerate(quark_labels, 1):
@@ -213,14 +222,14 @@ def get_quark_flavour(quark_labels, pdgid, g, dictionary, match_neutralino, log)
                 return dictionary, qlabel
 
 
-def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dict, selected_jets, jet_index, match_neutralino, log):
+def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgid, q_pdgid_dict, selected_jets, jet_index, match_neutralino, allow_quark_rematches, model, log):
     """ Find to which gluino (g1 or g2) a jet was matched and determine to which parton qX
     with X=[1, 2, 3] (X=[1, 2, 3, 4, 5]) for the 2x3 (2x5) model
     (see convention on process_files())
     """
     if g_barcodes['g1'] == 0:  # not assigned yet to any quark parent barcode
         g_barcodes['g1'] = q_parent_barcode
-        q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g1', q_pdgid_dict, match_neutralino, log)
+        q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g1', q_pdgid_dict, match_neutralino, model, log)
         if assigments['g1'][q_flavour] == -1:  # not assigned yet
             assigments['g1'][q_flavour] = jet_index
             assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
@@ -228,10 +237,10 @@ def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgi
             if selected_jets[jet_index].Pt() > selected_jets[assigments['g1'][q_flavour]].Pt():
                 assigments['g1'][q_flavour] = jet_index
                 assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
-    else:  # g1 was defined alredy (check if quark parent barcode agrees with it)
+    else:  # g1 was defined already (check if quark parent barcode agrees with it)
         if g_barcodes['g1'] == q_parent_barcode:
             q_pdgid_dict, q_flavour = get_quark_flavour(
-                quark_labels, pdgid, 'g1', q_pdgid_dict, match_neutralino, log)
+                quark_labels, pdgid, 'g1', q_pdgid_dict, match_neutralino, model, log)
             if assigments['g1'][q_flavour] == -1:  # not assigned yet
                 assigments['g1'][q_flavour] = jet_index
                 assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
@@ -240,7 +249,7 @@ def make_assigments(quark_labels, assigments, g_barcodes, q_parent_barcode, pdgi
                     assigments['g1'][q_flavour] = jet_index
                     assigments['g1'][q_flavour.replace('q', 'f')] = pdgid
         else:
-            q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g2', q_pdgid_dict, match_neutralino, log)
+            q_pdgid_dict, q_flavour = get_quark_flavour(quark_labels, pdgid, 'g2', q_pdgid_dict, match_neutralino, model, log)
             if assigments['g2'][q_flavour] == -1:  # not assigned yet
                 assigments['g2'][q_flavour] = jet_index
                 assigments['g2'][q_flavour.replace('q', 'f')] = pdgid
@@ -381,6 +390,8 @@ def make_event_display_grouped(event_number, jets, quarks):
 def process_files(settings):
 
     signal_model = settings['signalModel']
+    n_quarks = settings['nQuarks']
+    allow_quark_rematches = settings['allowQuarkReMatches']
 
     # Set structure of output H5 file
     Structure = {
@@ -407,9 +418,12 @@ def process_files(settings):
         # q4 is the second matched quark found for the corresponding neutralino (f4 is its pdgID)
         # q5 is the third matched quark found for the corresponding neutralino (f5 is its pdgID)
         # g1 is the first parent gluino for first matched quark
-        quark_labels = ['q1', 'q2', 'q3']
-        if signal_model == '2x5':
-            quark_labels += ['q4', 'q5']
+        if not allow_quark_rematches:
+            quark_labels = ['q1', 'q2', 'q3']
+            if signal_model == '2x5':
+                quark_labels += ['q4', 'q5']
+        else:
+            quark_labels = [f'q{x}' for x in range(1, n_quarks+1)]
         for gcase in ['g1', 'g2']:
             Structure[gcase] = ['mask']
             Structure[gcase] += quark_labels
@@ -480,7 +494,7 @@ def process_files(settings):
         passEventSelection = True
         if nJets < settings['MinNjets']:
             passEventSelection = False
-        if settings['do_matching'] and nQuarks != len(quark_labels) * 2:
+        if settings['do_matching'] and not allow_quark_rematches and nQuarks != len(quark_labels) * 2:
             passEventSelection = False
         if not passEventSelection:
             continue  # skip event
@@ -693,6 +707,8 @@ def process_files(settings):
             if settings['Debug']:
                 matcher.set_property('Debug', True)
             matcher.set_property('maxNmatchedJets', len(quark_labels) * 2)
+            if allow_quark_rematches:
+                matcher.set_property('MatchJetsToMatchedQuarks', True)
             matcher.set_property('MatchingCriteria',
                                  settings['MatchingCriteria'])
             if settings['MatchingCriteria'] != "UseFTDeltaRvalues":
@@ -703,7 +719,7 @@ def process_files(settings):
             for jet_index, jet in enumerate(matched_jets):
                 if jet.is_matched():
                     Assigments = make_assigments(quark_labels, Assigments, gBarcodes, jet.get_match_gluino_barcode(
-                    ), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index, jet.is_matched_to_neutralino(), log)
+                    ), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index, jet.is_matched_to_neutralino(), allow_quark_rematches, signal_model, log)
 
             # Check if fully matched
             n_matched_jets = sum(
@@ -716,11 +732,19 @@ def process_files(settings):
             # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
             for g in ['g1', 'g2']:
                 TempMask = True
-                for key in Assigments[g]:
-                    if key == 'mask' or 'f' in key:
-                        continue
-                    if Assigments[g][key] == -1:
-                        TempMask = False
+                if not allow_quark_rematches:
+                    for key in Assigments[g]:
+                        if key == 'mask' or 'f' in key:
+                            continue
+                        if Assigments[g][key] == -1:
+                            TempMask = False
+                else:  # check only first 3 (5) quarks for the 2x3 (2x5) model
+                    quark_labels_to_check = ['q1', 'q2', 'q3']
+                    if signal_model == '2x5':
+                        quark_labels_to_check += ['q4', 'q5']
+                    for key in quark_labels_to_check:
+                        if Assigments[g][key] == -1:
+                            TempMask = False
                 Assigments[g]['mask'] = TempMask
 
             # Count number of at least partially reconstructed events
