@@ -40,10 +40,9 @@ def options():
     parser.add_argument('-n', '--normalization_denominator', default=None, help='json library for norm weights.')
     parser.add_argument('--minHT', default=1100, type=int, help="Minimum HT of jets before any additional selections. Set to 1100 GeV for trigger efficiency curve turn on. (HT > minHT)")
     parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt (pt > minJetPt)")
+    parser.add_argument('--minNjetsAbovePtCut', default=100, type=int, help="Additional cut based on NJets with pt>minNjetsAbovePtCut) >= minNjets. Typically 5 jets with pT>100 GeV.")
     parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files (nJets >= minNjets)")
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files (maxNjets >= nJets)")
-    parser.add_argument('--minNjetsAbovePtCut', default=100, type=int, help="Additional cut based on NJets with pt>minNjetsAbovePtCut) >= minNjetsAbovePtNCut. Typically 5 jets with pT>100 GeV.")
-    parser.add_argument('--minNjetsAbovePtNJCut', default=5, type=int, help="Additional cut based on NJets with pt>minNjetsAbovePtCut) >= minNjetsAbovePtNCut")
     parser.add_argument('--signalModel', default='2x3', type=str, help="Signal model (2x3 or 2x5)")
     parser.add_argument('--nQuarks', default=6, type=int, help="Number of quarks per gluino. Only used when --allowQuarkReMatches is use. Example: 2 quarks could be the same but matched to two jets)")
     parser.add_argument('--allowQuarkReMatches', action='store_true', help="Let quarks to be matched to multiple jets")
@@ -461,7 +460,7 @@ def process_files(settings):
 
         # Apply event selections
         passEventSelection = True
-        passEventSelection = (HT > ops.minHT) and (nJets >= ops.minNjets) and (nJetsAbovePtCut >= ops.minNjetsAbovePtNJCut) #and (not allow_quark_rematches) and (nQuarks == len(quark_labels) * 2)
+        passEventSelection = (HT > ops.minHT) and (nJetsAbovePtCut >= ops.minNjets) #and (not allow_quark_rematches) and (nQuarks == len(quark_labels) * 2)
         if not passEventSelection:
             continue  # skip event
 
@@ -742,7 +741,7 @@ def process_files(settings):
     del tree
     
     # add cuts to structure and assignment list
-    assigments_list["cuts"] = {'minHT':ops.minHT, 'minJetPt':ops.minJetPt, 'minNjets':ops.minNjets, 'maxNjets':ops.maxNjets, 'minNjetsAbovePtCut':ops.minNjetsAbovePtCut, 'minNjetsAbovePtNJCut':ops.minNjetsAbovePtNJCut}
+    assigments_list["cuts"] = {'minHT':ops.minHT, 'minJetPt':ops.minJetPt, 'minNjets':ops.minNjets, 'maxNjets':ops.maxNjets, 'minNjetsAbovePtCut':ops.minNjetsAbovePtCut}
     Structure['cuts'] = assigments_list["cuts"].keys()
 
     # Create H5 file
