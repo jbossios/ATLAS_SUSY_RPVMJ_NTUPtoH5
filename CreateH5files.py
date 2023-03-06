@@ -29,8 +29,8 @@ import matplotlib.pyplot as plt
 logging.basicConfig(format='%(levelname)s: %(message)s', level='INFO')
 log = logging.getLogger('CreateH4Files')
 
-def main():
-
+def options():
+    
     # Read arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--inDir', required=True, help="Input directory of files")
@@ -38,99 +38,86 @@ def main():
     parser.add_argument('-v', '--version', default="0", help="Production version")
     parser.add_argument('-j', '--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool")
     parser.add_argument('-n', '--normalization_denominator', default=None, help='json library for norm weights.')
+    parser.add_argument('--minHT', default=1100, type=int, help="Minimum HT of jets before any additional selections. Set to 1100 GeV for trigger efficiency curve turn on.")
     parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt")
-    parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
     parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
+    parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
+    parser.add_argument('--minNjetsAbovePtCut', default=100, type=int, help="Additional cut based on NJets with pt>minNjetsAbovePtCut) >= minNjetsAbovePtNCut. Typically 5 jets with pT>100 GeV.")
+    parser.add_argument('--minNjetsAbovePtNJCut', default=5, type=int, help="Additional cut based on NJets with pt>minNjetsAbovePtCut) >= minNjetsAbovePtNCut")
     parser.add_argument('--signalModel', default='2x3', type=str, help="Signal model (2x3 or 2x5)")
     parser.add_argument('--nQuarks', default=6, type=int, help="Number of quarks per gluino. Only used when --allowQuarkReMatches is use. Example: 2 quarks could be the same but matched to two jets)")
     parser.add_argument('--allowQuarkReMatches', action='store_true', help="Let quarks to be matched to multiple jets")
     parser.add_argument('--shuffleJets', action='store_true', help="Shuffle jets before saving")
     parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority', help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
+    parser.add_argument('--deltaRcut', default=0.4, type=float, help='DeltaR cut for the matching')
     parser.add_argument('--doNotUseFSRs', action='store_true', help="Do not consider final state radiation (FSR) in jet-parton matching")
     parser.add_argument('--debug', action='store_true', help="Enable debug print statemetents")
     parser.add_argument('--doOverwrite', action="store_true", help="Overwrite already existing files")
     parser.add_argument('--doEventDisplays', action="store_true", default=False, help="Create event displays (only done if matching is performed)")
     parser.add_argument('--doSystematics', action="store_true", default=False, help="Process systematic TTrees (off by default)")
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    if args.debug:
+def main():
+
+    ops = options()
+
+    if ops.debug:
         log.setLevel("DEBUG")
 
     # Protection
-    if args.signalModel == '2x5' and args.allowQuarkReMatches:
+    if ops.signalModel == '2x5' and ops.allowQuarkReMatches:
         log.fatal('2x5 model is not supported with the "allowQuarkReMatches" option, exiting')
         sys.exit(1)
 
     # get input files and sum of weights
-    input_files = handleInput(args.inDir)
+    input_files = handleInput(ops.inDir)
 
     # make sure output directory exists
-    if not os.path.isdir(args.outDir):
-        os.makedirs(args.outDir)
+    if not os.path.isdir(ops.outDir):
+        os.makedirs(ops.outDir)
 
     # get sum of weights
-    if args.normalization_denominator:
-        with open(args.normalization_denominator) as f:
+    if ops.normalization_denominator:
+        with open(ops.normalization_denominator) as f:
             sum_of_weights = json.load(f)
     else:
         sum_of_weights = get_sum_of_weights(input_files)
-    log.info('Sum of weights: {}'.format(sum_of_weights))
 
     # get list of ttrees using the first input file
     f = ROOT.TFile(input_files[0])
-    if args.doSystematics:
+    if ops.doSystematics:
         treeNames = [key.GetName() for key in list(f.GetListOfKeys()) if "trees" in key.GetName()]
     else:
         treeNames = ['trees_SRRPV_']
     f.Close()
 
     # prepare outdir
-    if not os.path.isdir(args.outDir):
-        os.makedirs(args.outDir)
+    if not os.path.isdir(ops.outDir):
+        os.makedirs(ops.outDir)
 
     # make job configurations
     confs = []
     for treeName in treeNames:
         print(f"Including tree {treeName}")
         for inFileName in input_files:
-            
             dsid = str(inFileName.split('user.')[1].split('.')[2])
-
             confs.append({
-                # input settings
                 'inFileName': inFileName,
                 'sum_of_weights': sum_of_weights[dsid],
                 'treeName' : treeName,
-                'doOverwrite' : args.doOverwrite,
-                'signalModel': args.signalModel,
-                'nQuarks': args.nQuarks,
-                'allowQuarkReMatches': args.allowQuarkReMatches,
-                # output settings
-                'outDir': args.outDir,
-                # jet settings
-                'minJetPt': args.minJetPt,
-                'maxNjets': args.maxNjets,
-                'MinNjets': args.minNjets,
-                # matching settings
-                'MatchingCriteria': args.matchingCriteria,
-                'useFSRs': not args.doNotUseFSRs,
-                'dRcut': 0.4,
-                # global settings
-                'Debug': args.debug,
-                'doEventDisplays': args.doEventDisplays
             })
     print(f"Number of jobs launching: {len(confs)}")        
     
     # save confs to json
-    with open(os.path.join(args.outDir,'CreateH5files_confs.json'), 'w') as f:
+    with open(os.path.join(ops.outDir,'CreateH5files_confs.json'), 'w') as f:
         json.dump(confs, f, sort_keys=False, indent=4)
     
     # launch jobs
-    if args.ncpu == 1:
+    if ops.ncpu == 1:
         for conf in confs:
             process_files(conf)
     else:
-        results = mp.Pool(args.ncpu).map(process_files, confs)
+        results = mp.Pool(ops.ncpu).map(process_files, confs)
 
 
 def handleInput(data):
@@ -143,7 +130,6 @@ def handleInput(data):
     elif "*" in data:
         return sorted(glob(data))
     return []
-
 
 def get_sum_of_weights(file_list):
     # Get sum of weights from all input files (by DSID)
@@ -366,20 +352,22 @@ def make_event_display_grouped(event_number, jets, quarks):
 
 def process_files(settings):
 
+    ops = options()
+
     # check if output file already exists
-    outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", ".h5"))
-    if os.path.isfile(outFileName) and not settings['doOverwrite']:
+    outFileName = os.path.join(ops.outDir, os.path.basename(settings["inFileName"]).replace(".root", ".h5"))
+    if os.path.isfile(outFileName) and not ops.doOverwrite:
         log.info(f"Output file already exists so skipping: {outFileName}")
         return
 
-    signal_model = settings['signalModel']
-    n_quarks = settings['nQuarks']
-    allow_quark_rematches = settings['allowQuarkReMatches']
+    signal_model = ops.signalModel
+    n_quarks = ops.nQuarks
+    allow_quark_rematches = ops.allowQuarkReMatches
 
     # Set structure of output H5 file
     Structure = {
-        'source': ['eta', 'mask', 'phi', 'pt', 'e'],
-        'EventVars': ['gmass', 'normweight', 'jet_SphericityTensor_eigen21', 'jet_SphericityTensor_eigen22','jet_SphericityTensor_eigen31', 'jet_SphericityTensor_eigen32', 'jet_SphericityTensor_eigen33'],
+        'source': ['eta', 'phi', 'pt', 'e'],
+        'EventVars': ['gmass', 'normweight', 'jet_Cparam'],
     }
 
     # Collect info to know matching efficiency for each quark flavour
@@ -441,15 +429,15 @@ def process_files(settings):
         # Select reco jets
         AllPassJets = []
         for ijet in range(len(tree.jet_pt)):
-            if tree.jet_pt[ijet] > settings['minJetPt']:
+            if tree.jet_pt[ijet] > ops.minJetPt:
                 jet = RPVJet()
                 jet.SetPtEtaPhiE(tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
-                if settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
+                if ops.matchingCriteria == 'UseFTDeltaRvalues':
                     jet.set_matched_parton_barcode(int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
                     jet.set_matched_fsr_barcode(int(tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]))
                 AllPassJets.append(jet)
         # select leading n jets with n == min(maxNjets, njets)
-        SelectedJets = [AllPassJets[i] for i in range(min(settings['maxNjets'], len(AllPassJets)))]
+        SelectedJets = [AllPassJets[i] for i in range(min(ops.maxNjets, len(AllPassJets)))]
         nJets = len(SelectedJets)
         nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus("truth_QuarkFromGluino_pt") else 0
         nQuarks = nQuarksFromGs
@@ -462,7 +450,7 @@ def process_files(settings):
 
         # Apply event selections
         passEventSelection = True
-        if nJets < settings['MinNjets']:
+        if nJets < ops.minNjets:
             passEventSelection = False
         if not allow_quark_rematches and nQuarks != len(quark_labels) * 2:
             passEventSelection = False
@@ -472,8 +460,8 @@ def process_files(settings):
         event_counter += 1
 
         # Protection
-        if nJets > settings['maxNjets']:
-            log.fatal(f'More than {settings["maxNjets"]} jets were found ({nJets}), fix me!')
+        if nJets > ops.maxNjets:
+            log.fatal(f'More than {ops.maxNjets} jets were found ({nJets}), fix me!')
             sys.exit(1)
 
         # Extract gluino mass
@@ -504,15 +492,10 @@ def process_files(settings):
                     array.append(j.Phi())
                 elif case == 'pt':
                     array.append(j.Pt())
-                elif case == 'mask':
-                    array.append(True)
             # add extra (padding) jets to keep the number of jets fixed
-            if nJets < settings['maxNjets']:
-                for i in range(nJets, settings['maxNjets']):
-                    if case != 'mask':
-                        array.append(0.)
-                    else:
-                        array.append(False)
+            if nJets < ops.maxNjets:
+                for i in range(nJets, ops.maxNjets):
+                    array.append(0.)
             Assigments['source'][case] = np.array(array)
 
         # Save event-level variables
@@ -544,7 +527,7 @@ def process_files(settings):
             Quarks[iquark].set_barcode(quark_barcode)
             Quarks[iquark].set_pdgid(quark_pdgid)
 
-        if settings['useFSRs']:  # select FSR quarks from gluinos
+        if not ops.doNotUseFSRs:  # select FSR quarks from gluinos
             log.debug('Get FSRs from gluinos')
             FSRs = [RPVParton() for i in range(nFSRsFromGs)]
             for iFSR in range(nFSRsFromGs):
@@ -604,7 +587,7 @@ def process_files(settings):
             Quarks[iquark].set_pdgid(quark_pdgid)
             Quarks[iquark].set_is_coming_from_neutralino()
 
-        if signal_model == '2x5' and settings['useFSRs']:  # select FSR quarks from neutralinos
+        if signal_model == '2x5' and not ops.doNotUseFSRs:  # select FSR quarks from neutralinos
             log.debug('Get FSRs from neutralinos')
             FSRs += [RPVParton() for i in range(nFSRsFromNeutralinos)]
             for iFSR in range(nFSRsFromGs, nFSRsFromNeutralinos + nFSRsFromGs):
@@ -627,17 +610,17 @@ def process_files(settings):
                 FSRs[iFSR].set_is_coming_from_neutralino()
 
         # Create event display
-        if settings['doEventDisplays']:
+        if ops.doEventDisplays:
             make_event_display_pt_ranked(
                 tree.eventNumber,
                 {'jets': SelectedJets, 'level': 'reco'},
                 Quarks,
-                [] if not settings['useFSRs'] else FSRs)
+                [] if ops.doNotUseFSRs else FSRs)
             make_event_display_grouped(tree.eventNumber, SelectedJets, Quarks)
             # get truth jets
             truth_jets = []
             for ijet in range(len(tree.truth_jet_pt)):
-                if tree.truth_jet_pt[ijet] > settings['minJetPt']:
+                if tree.truth_jet_pt[ijet] > ops.minJetPt:
                     jet = RPVJet()
                     jet.SetPtEtaPhiE(tree.truth_jet_pt[ijet], tree.truth_jet_eta[ijet], tree.truth_jet_phi[ijet], tree.truth_jet_e[ijet])
                     truth_jets.append(jet)
@@ -645,16 +628,16 @@ def process_files(settings):
 
         # Match reco jets to closest parton
         matcher = RPVMatcher(Jets = SelectedJets, Partons = Quarks)
-        if settings['useFSRs']:
+        if not ops.doNotUseFSRs:
             matcher.add_fsrs(FSRs)
-        if settings['Debug']:
+        if ops.debug:
             matcher.set_property('Debug', True)
         matcher.set_property('maxNmatchedJets', len(quark_labels) * 2)
         if allow_quark_rematches:
             matcher.set_property('MatchJetsToMatchedQuarks', True)
-        matcher.set_property('MatchingCriteria',settings['MatchingCriteria'])
-        if settings['MatchingCriteria'] != "UseFTDeltaRvalues":
-            matcher.set_property('DeltaRcut', settings['dRcut'])
+        matcher.set_property('MatchingCriteria',ops.matchingCriteria)
+        if ops.matchingCriteria != "UseFTDeltaRvalues":
+            matcher.set_property('DeltaRcut', ops.deltaRcut)
         matched_jets = matcher.match()
 
         # Fill Assigments (info for matched jets)
@@ -742,13 +725,17 @@ def process_files(settings):
         if MultipleJetsMatchingAQuark:
             multipleQuarkMatchingEvents += 1
 
-    # Add data to assigments_list
-    for key in Structure:
-        for case in Structure[key]:
-            assigments_list[key][case].append(Assigments[key][case])
-
+        # Add data to assigments_list
+        for key in Structure:
+            for case in Structure[key]:
+                assigments_list[key][case].append(Assigments[key][case])
+    
     # Close input file
     del tree
+    
+    # add cuts to structure and assignment list
+    assigments_list["cuts"] = {'minHT':ops.minHT, 'minJetPt':ops.minJetPt, 'minNjets':ops.minNjets, 'maxNjets':ops.maxNjets, 'minNjetsAbovePtCut':ops.minNjetsAbovePtCut, 'minNjetsAbovePtNJCut':ops.minNjetsAbovePtNJCut}
+    Structure['cuts'] = assigments_list["cuts"].keys()
 
     # Create H5 file
     log.info('Creating {}'.format(outFileName))
@@ -757,20 +744,22 @@ def process_files(settings):
         for key in Structure:
             Groups[key] = HF.create_group(key)
             for case in Structure[key]:
+                print(f"    Making dataset: {key}/{case}")
                 Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=assigments_list[key][case])
 
     # Save histogram
-    outFile = ROOT.TFile(os.path.join(settings["outDir"], "GluinoMassDiff.root"), 'RECREATE')
+    outFile = ROOT.TFile(os.path.join(ops.outDir, "GluinoMassDiff.root"), 'RECREATE')
     hGluinoMassDiff.Write()
     outFile.Close()
     
     # Reco gluino mass distributions
-    outFile = ROOT.TFile(os.path.join(settings["outDir"], "ReconstructedGluinoMasses.root"), 'RECREATE')
+    outFile = ROOT.TFile(os.path.join(ops.outDir, "ReconstructedGluinoMasses.root"), 'RECREATE')
     for key, hist in hRecoMasses.items():
         hist.Write()
     outFile.Close()
 
     # print matching efficiency
+    log.info(f'Number of events saved: {event_counter}')
     log.info(f'matching efficiency (percentage of events where {len(quark_labels) * 2} quarks are matched): {matchedEvents/event_counter}')
     log.info(f'partial matching efficiency (percentage of events where at least one gluino is matched): {partial_events/event_counter}')
     if signal_model == '2x5':
@@ -783,7 +772,7 @@ def process_files(settings):
             log.info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
 
     # saving matching settings
-    with open(os.path.join(settings["outDir"], "matchedEvents.root"),"w") as outFile:
+    with open(os.path.join(ops.outDir, "matchedEvents.root"),"w") as outFile:
         for event in matchedEventNumbers:
             outFile.write(str(event)+'\n')
 
