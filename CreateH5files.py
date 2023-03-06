@@ -112,7 +112,6 @@ def main():
                 'maxNjets': args.maxNjets,
                 'MinNjets': args.minNjets,
                 # matching settings
-                'do_matching' : True,
                 'MatchingCriteria': args.matchingCriteria,
                 'useFSRs': not args.doNotUseFSRs,
                 'dRcut': 0.4,
@@ -367,74 +366,70 @@ def make_event_display_grouped(event_number, jets, quarks):
 
 def process_files(settings):
 
+    # check if output file already exists
+    outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", ".h5"))
+    if os.path.isfile(outFileName) and not settings['doOverwrite']:
+        log.info(f"Output file already exists so skipping: {outFileName}")
+        return
+
     signal_model = settings['signalModel']
     n_quarks = settings['nQuarks']
     allow_quark_rematches = settings['allowQuarkReMatches']
 
     # Set structure of output H5 file
     Structure = {
-        'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'e'],
-        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass', 'rowNo', 'normweight', 'jet_SphericityTensor_eigen21', 'jet_SphericityTensor_eigen22','jet_SphericityTensor_eigen31', 'jet_SphericityTensor_eigen32', 'jet_SphericityTensor_eigen33'],
+        'source': ['eta', 'mask', 'phi', 'pt', 'e'],
+        'EventVars': ['gmass', 'normweight', 'jet_SphericityTensor_eigen21', 'jet_SphericityTensor_eigen22','jet_SphericityTensor_eigen31', 'jet_SphericityTensor_eigen32', 'jet_SphericityTensor_eigen33'],
     }
 
-    if settings['do_matching']:
-
-        # Collect info to know matching efficiency for each quark flavour
-        quark_flavours = [1, 2, 3, 4, 5, 6]
-        NquarksByFlavour = {flav: 0 for flav in quark_flavours}
-        NmatchedQuarksByFlavour = {flav: 0 for flav in quark_flavours}
-
-        # conventions:
-        # 2x3 signals:
-        # q1 is the first matched quark found for the corresponding gluino (f1 is its pdgID)
-        # q2 is the second matched quark found for the corresponding gluino (f2 is its pdgID)
-        # q3 is the third matched quark found for the corresponding gluino (f3 is its pdgID)
-        # 2x5 signals:
-        # q1 is the first matched quark found for the corresponding gluino (f1 is its pdgID)
-        # q2 is the second matched quark found for the corresponding gluino (f2 is its pdgID)
-        # q3 is the first matched quark found for the corresponding neutralino (f3 is its pdgID)
-        # q4 is the second matched quark found for the corresponding neutralino (f4 is its pdgID)
-        # q5 is the third matched quark found for the corresponding neutralino (f5 is its pdgID)
-        # g1 is the first parent gluino for first matched quark
-        if not allow_quark_rematches:
-            quark_labels = ['q1', 'q2', 'q3']
-            if signal_model == '2x5':
-                quark_labels += ['q4', 'q5']
-        else:
-            quark_labels = [f'q{x}' for x in range(1, n_quarks+1)]
-        for gcase in ['g1', 'g2']:
-            Structure[gcase] = ['mask']
-            Structure[gcase] += quark_labels
-            Structure[gcase] += [label.replace('q', 'f') for label in quark_labels]
-        Structure['EventVars'].append('gmass')
-
-        # Reconstructed mass by truth mass
-        Masses = [100, 200, 300, 400] + [900 + i*100 for i in range(0, 17)]
-        hRecoMasses = {mass: ROOT.TH1D(f'RecoMass_TruthMass{mass}', '', 300, 0, 3000) for mass in Masses}
-
-        # Reconstructed gluino mass - true gluino mass
-        hGluinoMassDiff = ROOT.TH1D('GluinoMassDiff', '', 10000, -10000, 10000)
-        matchedEvents = 0
-        partial_events = 0  # keep track of partially reconstructed events (gluinos)
-        neutralinos_fully_matched = 0
-        neutralinos_partially_matched = 0
-        multipleQuarkMatchingEvents = 0
-        matchedEventNumbers = []
+    # Collect info to know matching efficiency for each quark flavour
+    quark_flavours = [1, 2, 3, 4, 5, 6]
+    NquarksByFlavour = {flav: 0 for flav in quark_flavours}
+    NmatchedQuarksByFlavour = {flav: 0 for flav in quark_flavours}
+    
+    # conventions:
+    # 2x3 signals:
+    # q1 is the first matched quark found for the corresponding gluino (f1 is its pdgID)
+    # q2 is the second matched quark found for the corresponding gluino (f2 is its pdgID)
+    # q3 is the third matched quark found for the corresponding gluino (f3 is its pdgID)
+    # 2x5 signals:
+    # q1 is the first matched quark found for the corresponding gluino (f1 is its pdgID)
+    # q2 is the second matched quark found for the corresponding gluino (f2 is its pdgID)
+    # q3 is the first matched quark found for the corresponding neutralino (f3 is its pdgID)
+    # q4 is the second matched quark found for the corresponding neutralino (f4 is its pdgID)
+    # q5 is the third matched quark found for the corresponding neutralino (f5 is its pdgID)
+    # g1 is the first parent gluino for first matched quark
+    if not allow_quark_rematches:
+        quark_labels = ['q1', 'q2', 'q3']
+        if signal_model == '2x5':
+            quark_labels += ['q4', 'q5']
+    else:
+        quark_labels = [f'q{x}' for x in range(1, n_quarks+1)]
+    for gcase in ['g1', 'g2']:
+        Structure[gcase] = ['mask']
+        Structure[gcase] += quark_labels
+        Structure[gcase] += [label.replace('q', 'f') for label in quark_labels]
+                
+    # Reconstructed mass by truth mass
+    Masses = [100, 200, 300, 400] + [900 + i*100 for i in range(0, 17)]
+    hRecoMasses = {mass: ROOT.TH1D(f'RecoMass_TruthMass{mass}', '', 300, 0, 3000) for mass in Masses}
+    
+    # Reconstructed gluino mass - true gluino mass
+    hGluinoMassDiff = ROOT.TH1D('GluinoMassDiff', '', 10000, -10000, 10000)
+    matchedEvents = 0
+    partial_events = 0  # keep track of partially reconstructed events (gluinos)
+    neutralinos_fully_matched = 0
+    neutralinos_partially_matched = 0
+    multipleQuarkMatchingEvents = 0
+    matchedEventNumbers = []
 
     # Initialize lists for each variable to be saved
-    assigments_list = {key: {case: [] for case in cases}
-                       for key, cases in Structure.items()}
+    assigments_list = {key: {case: [] for case in cases} for key, cases in Structure.items()}
 
     ##############################################################################################
     # Loop over events and fill the numpy arrays on each event
     ##############################################################################################
     
-    # check if output file already exists
-    outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", ".h5"))
-    if os.path.isfile(outFileName) and not settings['doOverwrite']:
-        log.info(f"Output file already exists so skipping: {outFileName}")
-        return 
-
     # Create TChain using all input ROOT files
     tree = ROOT.TChain(settings["treeName"])
     tree.Add(settings["inFileName"])
@@ -449,30 +444,27 @@ def process_files(settings):
             if tree.jet_pt[ijet] > settings['minJetPt']:
                 jet = RPVJet()
                 jet.SetPtEtaPhiE(tree.jet_pt[ijet], tree.jet_eta[ijet], tree.jet_phi[ijet], tree.jet_e[ijet])
-                if tree.FindBranch('jet_JetQGTaggerBDT_score'):
-                    jet.set_qgtagger_bdt(tree.jet_JetQGTaggerBDT_score[ijet]) #tree.jet_QGTagger_bdt[ijet])
-                if settings['do_matching'] and settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
+                if settings['MatchingCriteria'] == 'UseFTDeltaRvalues':
                     jet.set_matched_parton_barcode(int(tree.jet_deltaRcut_matched_truth_particle_barcode[ijet]))
                     jet.set_matched_fsr_barcode(int(tree.jet_deltaRcut_FSRmatched_truth_particle_barcode[ijet]))
                 AllPassJets.append(jet)
         # select leading n jets with n == min(maxNjets, njets)
         SelectedJets = [AllPassJets[i] for i in range(min(settings['maxNjets'], len(AllPassJets)))]
         nJets = len(SelectedJets)
-        if settings['do_matching']:
-            nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus("truth_QuarkFromGluino_pt") else 0
-            nQuarks = nQuarksFromGs
-            nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus("truth_FSRFromGluinoQuark_pt") else 0
-            if signal_model == '2x5':
-                if tree.GetBranchStatus("truth_QuarkFromNeutralino_pt"):
-                    nQuarks += len(tree.truth_QuarkFromNeutralino_pt)
-                if tree.GetBranchStatus("truth_FSRFromNeutralinoQuark_pt"):
-                    nFSRsFromNeutralinos = len(tree.truth_FSRFromNeutralinoQuark_pt)
+        nQuarksFromGs = len(tree.truth_QuarkFromGluino_pt) if tree.GetBranchStatus("truth_QuarkFromGluino_pt") else 0
+        nQuarks = nQuarksFromGs
+        nFSRsFromGs = len(tree.truth_FSRFromGluinoQuark_pt) if tree.GetBranchStatus("truth_FSRFromGluinoQuark_pt") else 0
+        if signal_model == '2x5':
+            if tree.GetBranchStatus("truth_QuarkFromNeutralino_pt"):
+                nQuarks += len(tree.truth_QuarkFromNeutralino_pt)
+            if tree.GetBranchStatus("truth_FSRFromNeutralinoQuark_pt"):
+                nFSRsFromNeutralinos = len(tree.truth_FSRFromNeutralinoQuark_pt)
 
         # Apply event selections
         passEventSelection = True
         if nJets < settings['MinNjets']:
             passEventSelection = False
-        if settings['do_matching'] and not allow_quark_rematches and nQuarks != len(quark_labels) * 2:
+        if not allow_quark_rematches and nQuarks != len(quark_labels) * 2:
             passEventSelection = False
         if not passEventSelection:
             continue  # skip event
@@ -498,21 +490,14 @@ def process_files(settings):
             if 'q' in case:
                 return -1
             return 0
-        Assigments = {key: {case: init_value(
-            case) for case in cases} for key, cases in Structure.items()}
+        Assigments = {key: {case: init_value(case) for case in cases} for key, cases in Structure.items()}
 
         # Create arrays with jet info (extend Assigments with jet reco info)
-        ht_calculated = False
-        ht = 0
         for case in Structure['source']:
             array = []
             for j in SelectedJets:
-                if not ht_calculated:
-                    ht += j.Pt()
                 if case == 'eta':
                     array.append(j.Eta())
-                elif case == 'mass':
-                    array.append(j.M())
                 elif case == 'e':
                     array.append(j.E())
                 elif case == 'phi':
@@ -521,9 +506,6 @@ def process_files(settings):
                     array.append(j.Pt())
                 elif case == 'mask':
                     array.append(True)
-                elif case == 'QGTaggerBDT':
-                    array.append(j.get_qgtagger_bdt())
-            ht_calculated = True
             # add extra (padding) jets to keep the number of jets fixed
             if nJets < settings['maxNjets']:
                 for i in range(nJets, settings['maxNjets']):
@@ -535,254 +517,235 @@ def process_files(settings):
 
         # Save event-level variables
         Assigments['EventVars']['rowNo'] = counter # row number of event
-        Assigments['EventVars']['HT'] = ht
-        Assigments['EventVars']['deta'] = SelectedJets[0].Eta() - SelectedJets[1].Eta()
-        Assigments['EventVars']['djmass'] = (SelectedJets[0]+SelectedJets[1]).M()
-        Assigments['EventVars']['jet_SphericityTensor_eigen21'] = tree.jet_SphericityTensor_eigen21[0]
-        Assigments['EventVars']['jet_SphericityTensor_eigen22'] = tree.jet_SphericityTensor_eigen22[0]
-        Assigments['EventVars']['jet_SphericityTensor_eigen31'] = tree.jet_SphericityTensor_eigen31[0]
-        Assigments['EventVars']['jet_SphericityTensor_eigen32'] = tree.jet_SphericityTensor_eigen32[0]
-        Assigments['EventVars']['jet_SphericityTensor_eigen33'] = tree.jet_SphericityTensor_eigen33[0]
+        Assigments['EventVars']['jet_Cparam'] = 3*(tree.jet_SphericityTensor_eigen31[0]*tree.jet_SphericityTensor_eigen32[0] + tree.jet_SphericityTensor_eigen31[0]*tree.jet_SphericityTensor_eigen33[0] + tree.jet_SphericityTensor_eigen32[0]*tree.jet_SphericityTensor_eigen33[0])
         Assigments['EventVars']['gmass'] = gmass
         #Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
         Assigments['EventVars']['normweight'] = tree.mcEventWeightsVector[0] * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
 
-        if settings['do_matching']:
+        # Collect gluino barcodes
+        gBarcodes = {'g1': 0, 'g2': 0}  # fill temporary values
 
-            # Collect gluino barcodes
-            gBarcodes = {'g1': 0, 'g2': 0}  # fill temporary values
+        # Collect quark -> gluino associations
+        qPDGIDs = {g: {label: 0 for label in quark_labels} for g in ['g1', 'g2']}  # fill temporary values
 
-            # Collect quark -> gluino associations
-            qPDGIDs = {g: {label: 0 for label in quark_labels}
-                       for g in ['g1', 'g2']}  # fill temporary values
+        # Select quarks from gluinos
+        log.debug('Get quarks from gluinos')
+        Quarks = [RPVParton() for i in range(nQuarksFromGs)]
+        for iquark in range(nQuarksFromGs):
+            quark_pt = tree.truth_QuarkFromGluino_pt[iquark]
+            quark_eta = tree.truth_QuarkFromGluino_eta[iquark]
+            quark_phi = tree.truth_QuarkFromGluino_phi[iquark]
+            quark_e = tree.truth_QuarkFromGluino_e[iquark]
+            quark_parent_barcode = tree.truth_QuarkFromGluino_ParentBarcode[iquark]
+            quark_barcode = tree.truth_QuarkFromGluino_barcode[iquark]
+            quark_pdgid = tree.truth_QuarkFromGluino_pdgId[iquark]
+            Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
+            Quarks[iquark].set_gluino_barcode(quark_parent_barcode)
+            Quarks[iquark].set_barcode(quark_barcode)
+            Quarks[iquark].set_pdgid(quark_pdgid)
 
-            # Select quarks from gluinos
-            log.debug('Get quarks from gluinos')
-            Quarks = [RPVParton() for i in range(nQuarksFromGs)]
-            for iquark in range(nQuarksFromGs):
-                quark_pt = tree.truth_QuarkFromGluino_pt[iquark]
-                quark_eta = tree.truth_QuarkFromGluino_eta[iquark]
-                quark_phi = tree.truth_QuarkFromGluino_phi[iquark]
-                quark_e = tree.truth_QuarkFromGluino_e[iquark]
-                quark_parent_barcode = tree.truth_QuarkFromGluino_ParentBarcode[iquark]
-                quark_barcode = tree.truth_QuarkFromGluino_barcode[iquark]
-                quark_pdgid = tree.truth_QuarkFromGluino_pdgId[iquark]
-                Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
-                Quarks[iquark].set_gluino_barcode(quark_parent_barcode)
-                Quarks[iquark].set_barcode(quark_barcode)
-                Quarks[iquark].set_pdgid(quark_pdgid)
-
-            if settings['useFSRs']:  # select FSR quarks from gluinos
-              log.debug('Get FSRs from gluinos')
-              FSRs = [RPVParton() for i in range(nFSRsFromGs)]
-              for iFSR in range(nFSRsFromGs):
-                  FSRs[iFSR].SetPtEtaPhiE(tree.truth_FSRFromGluinoQuark_pt[iFSR], tree.truth_FSRFromGluinoQuark_eta[iFSR],
-                                                     tree.truth_FSRFromGluinoQuark_phi[iFSR], tree.truth_FSRFromGluinoQuark_e[iFSR])
-                  # Find quark which emitted this FSR and get its parentBarcode
-                  quark_found = False
-                  for parton in Quarks:
-                      if parton.get_barcode() == tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR]:
-                          quark_found = True
-                          FSRs[iFSR].set_gluino_barcode(
-                              parton.get_gluino_barcode())
-                          FSRs[iFSR].set_pdgid(parton.get_pdgid())
-                  if not quark_found:
-                      log.fatal('Quark from gluino that emitted FSR (iFSR = {}) not found, exiting'.format(iFSR))
-                      sys.exit(1)
-                  FSRs[iFSR].set_barcode(
-                      tree.truth_FSRFromGluinoQuark_barcode[iFSR])
-                  FSRs[iFSR].set_quark_barcode(
-                      tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR])
-
-            # Get nuetralinos
-            if signal_model == '2x5':
-                nNeutralinos = len(tree.truth_NeutralinoFromGluino_pt)
-                neutralinos = [RPVParton() for i in range(nNeutralinos)]
-                for iNeutralino in range(nNeutralinos):
-                      neutralinos[iNeutralino].SetPtEtaPhiE(tree.truth_NeutralinoFromGluino_pt[iNeutralino], tree.truth_NeutralinoFromGluino_eta[iNeutralino],
-                                                     tree.truth_NeutralinoFromGluino_phi[iNeutralino], tree.truth_NeutralinoFromGluino_e[iNeutralino])
-                      neutralinos[iNeutralino].set_barcode(
-                          tree.truth_NeutralinoFromGluino_barcode[iNeutralino])
-                      neutralinos[iNeutralino].set_gluino_barcode(
-                          tree.truth_NeutralinoFromGluino_ParentBarcode[iNeutralino])
-
-            # Add quarks from neutralinos
-            log.debug('Adding quarks from neutralinos')
-            for iquark in range(nQuarksFromGs, nQuarks):
-                index = iquark - nQuarksFromGs
-                quark_pt = tree.truth_QuarkFromNeutralino_pt[index]
-                quark_eta = tree.truth_QuarkFromNeutralino_eta[index]
-                quark_phi = tree.truth_QuarkFromNeutralino_phi[index]
-                quark_e = tree.truth_QuarkFromNeutralino_e[index]
-                quark_neutralino_barcode = tree.truth_QuarkFromNeutralino_ParentBarcode[index]
-                # Find parent gluino barcode
-                neutralino_found = False
-                for neutralino in neutralinos:
-                    if neutralino.get_barcode() == quark_neutralino_barcode:
-                        neutralino_found = True
-                        quark_gluino_barcode = neutralino.get_gluino_barcode()
-                if not neutralino_found:
-                    log.fatal(f'Corresponding neutralino not found for quark {iquark} not found, exiting')
+        if settings['useFSRs']:  # select FSR quarks from gluinos
+            log.debug('Get FSRs from gluinos')
+            FSRs = [RPVParton() for i in range(nFSRsFromGs)]
+            for iFSR in range(nFSRsFromGs):
+                FSRs[iFSR].SetPtEtaPhiE(tree.truth_FSRFromGluinoQuark_pt[iFSR], tree.truth_FSRFromGluinoQuark_eta[iFSR],
+                                        tree.truth_FSRFromGluinoQuark_phi[iFSR], tree.truth_FSRFromGluinoQuark_e[iFSR])
+                # Find quark which emitted this FSR and get its parentBarcode
+                quark_found = False
+                for parton in Quarks:
+                    if parton.get_barcode() == tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR]:
+                        quark_found = True
+                        FSRs[iFSR].set_gluino_barcode(
+                            parton.get_gluino_barcode())
+                        FSRs[iFSR].set_pdgid(parton.get_pdgid())
+                if not quark_found:
+                    log.fatal('Quark from gluino that emitted FSR (iFSR = {}) not found, exiting'.format(iFSR))
                     sys.exit(1)
-                quark_barcode = tree.truth_QuarkFromNeutralino_barcode[index]
-                quark_pdgid = tree.truth_QuarkFromNeutralino_pdgId[index]
-                Quarks += [RPVParton()]
-                Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
-                Quarks[iquark].set_gluino_barcode(quark_gluino_barcode)
-                Quarks[iquark].set_neutralino_barcode(quark_neutralino_barcode)
-                Quarks[iquark].set_barcode(quark_barcode)
-                Quarks[iquark].set_pdgid(quark_pdgid)
-                Quarks[iquark].set_is_coming_from_neutralino()
+                FSRs[iFSR].set_barcode(
+                    tree.truth_FSRFromGluinoQuark_barcode[iFSR])
+                FSRs[iFSR].set_quark_barcode(
+                    tree.truth_FSRFromGluinoQuark_LastQuarkInChain_barcode[iFSR])
 
-            if signal_model == '2x5' and settings['useFSRs']:  # select FSR quarks from neutralinos
-                log.debug('Get FSRs from neutralinos')
-                FSRs += [RPVParton() for i in range(nFSRsFromNeutralinos)]
-                for iFSR in range(nFSRsFromGs, nFSRsFromNeutralinos + nFSRsFromGs):
-                    index = iFSR - nFSRsFromGs
-                    FSRs[iFSR].SetPtEtaPhiE(tree.truth_FSRFromNeutralinoQuark_pt[index], tree.truth_FSRFromNeutralinoQuark_eta[index],
-                                                       tree.truth_FSRFromNeutralinoQuark_phi[index], tree.truth_FSRFromNeutralinoQuark_e[index])
-                    # Find quark which emitted this FSR and get its parentBarcode
-                    quark_found = False
-                    for iparton in range(nQuarksFromGs, len(Quarks)):
-                        parton = Quarks[iparton]
-                        if parton.get_barcode() == tree.truth_FSRFromNeutralinoQuark_LastNeutralinoInChain_barcode[index]:
-                            quark_found = True
-                            FSRs[iFSR].set_gluino_barcode(
-                                parton.get_gluino_barcode())
-                            FSRs[iFSR].set_pdgid(parton.get_pdgid())
-                    if not quark_found:
-                        log.fatal('Quark from neutralino that emitted FSR (iFSR = {}) not found, exiting'.format(iFSR))
-                        sys.exit(1)
-                    FSRs[iFSR].set_barcode(
-                        tree.truth_FSRFromNeutralinoQuark_barcode[index])
-                    FSRs[iFSR].set_quark_barcode(
-                        tree.truth_FSRFromNeutralinoQuark_LastNeutralinoInChain_barcode[index])
-                    FSRs[iFSR].set_is_coming_from_neutralino()
+        # Get nuetralinos
+        if signal_model == '2x5':
+            nNeutralinos = len(tree.truth_NeutralinoFromGluino_pt)
+            neutralinos = [RPVParton() for i in range(nNeutralinos)]
+            for iNeutralino in range(nNeutralinos):
+                neutralinos[iNeutralino].SetPtEtaPhiE(tree.truth_NeutralinoFromGluino_pt[iNeutralino], tree.truth_NeutralinoFromGluino_eta[iNeutralino],
+                                                      tree.truth_NeutralinoFromGluino_phi[iNeutralino], tree.truth_NeutralinoFromGluino_e[iNeutralino])
+                neutralinos[iNeutralino].set_barcode(tree.truth_NeutralinoFromGluino_barcode[iNeutralino])
+                neutralinos[iNeutralino].set_gluino_barcode(tree.truth_NeutralinoFromGluino_ParentBarcode[iNeutralino])
 
-            # Create event display
-            if settings['doEventDisplays']:
-                make_event_display_pt_ranked(
-                    tree.eventNumber,
-                    {'jets': SelectedJets, 'level': 'reco'},
-                    Quarks,
-                    [] if not settings['useFSRs'] else FSRs)
-                make_event_display_grouped(tree.eventNumber, SelectedJets, Quarks)
-                # get truth jets
-                truth_jets = []
-                for ijet in range(len(tree.truth_jet_pt)):
-                    if tree.truth_jet_pt[ijet] > settings['minJetPt']:
-                        jet = RPVJet()
-                        jet.SetPtEtaPhiE(tree.truth_jet_pt[ijet], tree.truth_jet_eta[ijet], tree.truth_jet_phi[ijet], tree.truth_jet_e[ijet])
-                        truth_jets.append(jet)
-                make_event_display_pt_ranked(tree.eventNumber, {'jets': truth_jets, 'level': 'truth'}, Quarks)
+        # Add quarks from neutralinos
+        log.debug('Adding quarks from neutralinos')
+        for iquark in range(nQuarksFromGs, nQuarks):
+            index = iquark - nQuarksFromGs
+            quark_pt = tree.truth_QuarkFromNeutralino_pt[index]
+            quark_eta = tree.truth_QuarkFromNeutralino_eta[index]
+            quark_phi = tree.truth_QuarkFromNeutralino_phi[index]
+            quark_e = tree.truth_QuarkFromNeutralino_e[index]
+            quark_neutralino_barcode = tree.truth_QuarkFromNeutralino_ParentBarcode[index]
+            # Find parent gluino barcode
+            neutralino_found = False
+            for neutralino in neutralinos:
+                if neutralino.get_barcode() == quark_neutralino_barcode:
+                    neutralino_found = True
+                    quark_gluino_barcode = neutralino.get_gluino_barcode()
+            if not neutralino_found:
+                log.fatal(f'Corresponding neutralino not found for quark {iquark} not found, exiting')
+                sys.exit(1)
+            quark_barcode = tree.truth_QuarkFromNeutralino_barcode[index]
+            quark_pdgid = tree.truth_QuarkFromNeutralino_pdgId[index]
+            Quarks += [RPVParton()]
+            Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
+            Quarks[iquark].set_gluino_barcode(quark_gluino_barcode)
+            Quarks[iquark].set_neutralino_barcode(quark_neutralino_barcode)
+            Quarks[iquark].set_barcode(quark_barcode)
+            Quarks[iquark].set_pdgid(quark_pdgid)
+            Quarks[iquark].set_is_coming_from_neutralino()
 
-            # Match reco jets to closest parton
-            matcher = RPVMatcher(Jets = SelectedJets, Partons = Quarks)
-            if settings['useFSRs']:
-                matcher.add_fsrs(FSRs)
-            if settings['Debug']:
-                matcher.set_property('Debug', True)
-            matcher.set_property('maxNmatchedJets', len(quark_labels) * 2)
-            if allow_quark_rematches:
-                matcher.set_property('MatchJetsToMatchedQuarks', True)
-            matcher.set_property('MatchingCriteria',
-                                 settings['MatchingCriteria'])
-            if settings['MatchingCriteria'] != "UseFTDeltaRvalues":
-                matcher.set_property('DeltaRcut', settings['dRcut'])
-            matched_jets = matcher.match()
+        if signal_model == '2x5' and settings['useFSRs']:  # select FSR quarks from neutralinos
+            log.debug('Get FSRs from neutralinos')
+            FSRs += [RPVParton() for i in range(nFSRsFromNeutralinos)]
+            for iFSR in range(nFSRsFromGs, nFSRsFromNeutralinos + nFSRsFromGs):
+                index = iFSR - nFSRsFromGs
+                FSRs[iFSR].SetPtEtaPhiE(tree.truth_FSRFromNeutralinoQuark_pt[index], tree.truth_FSRFromNeutralinoQuark_eta[index],
+                                        tree.truth_FSRFromNeutralinoQuark_phi[index], tree.truth_FSRFromNeutralinoQuark_e[index])
+                # Find quark which emitted this FSR and get its parentBarcode
+                quark_found = False
+                for iparton in range(nQuarksFromGs, len(Quarks)):
+                    parton = Quarks[iparton]
+                    if parton.get_barcode() == tree.truth_FSRFromNeutralinoQuark_LastNeutralinoInChain_barcode[index]:
+                        quark_found = True
+                        FSRs[iFSR].set_gluino_barcode(parton.get_gluino_barcode())
+                        FSRs[iFSR].set_pdgid(parton.get_pdgid())
+                if not quark_found:
+                    log.fatal('Quark from neutralino that emitted FSR (iFSR = {}) not found, exiting'.format(iFSR))
+                    sys.exit(1)
+                FSRs[iFSR].set_barcode(tree.truth_FSRFromNeutralinoQuark_barcode[index])
+                FSRs[iFSR].set_quark_barcode(tree.truth_FSRFromNeutralinoQuark_LastNeutralinoInChain_barcode[index])
+                FSRs[iFSR].set_is_coming_from_neutralino()
 
-            # Fill Assigments (info for matched jets)
-            for jet_index, jet in enumerate(matched_jets):
-                if jet.is_matched():
-                    Assigments = make_assigments(quark_labels, Assigments, gBarcodes, jet.get_match_gluino_barcode(
-                    ), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index, jet.is_matched_to_neutralino(), allow_quark_rematches, signal_model, log)
+        # Create event display
+        if settings['doEventDisplays']:
+            make_event_display_pt_ranked(
+                tree.eventNumber,
+                {'jets': SelectedJets, 'level': 'reco'},
+                Quarks,
+                [] if not settings['useFSRs'] else FSRs)
+            make_event_display_grouped(tree.eventNumber, SelectedJets, Quarks)
+            # get truth jets
+            truth_jets = []
+            for ijet in range(len(tree.truth_jet_pt)):
+                if tree.truth_jet_pt[ijet] > settings['minJetPt']:
+                    jet = RPVJet()
+                    jet.SetPtEtaPhiE(tree.truth_jet_pt[ijet], tree.truth_jet_eta[ijet], tree.truth_jet_phi[ijet], tree.truth_jet_e[ijet])
+                    truth_jets.append(jet)
+            make_event_display_pt_ranked(tree.eventNumber, {'jets': truth_jets, 'level': 'truth'}, Quarks)
 
-            # Check if fully matched
-            n_matched_jets = sum(
-                [1 if jet.is_matched() else 0 for jet in matched_jets])
-            log.debug(f'number of matched jets = {n_matched_jets}')
-            if n_matched_jets == len(quark_labels) * 2:
-                matchedEventNumbers.append(tree.eventNumber)
-                matchedEvents += 1
+        # Match reco jets to closest parton
+        matcher = RPVMatcher(Jets = SelectedJets, Partons = Quarks)
+        if settings['useFSRs']:
+            matcher.add_fsrs(FSRs)
+        if settings['Debug']:
+            matcher.set_property('Debug', True)
+        matcher.set_property('maxNmatchedJets', len(quark_labels) * 2)
+        if allow_quark_rematches:
+            matcher.set_property('MatchJetsToMatchedQuarks', True)
+        matcher.set_property('MatchingCriteria',settings['MatchingCriteria'])
+        if settings['MatchingCriteria'] != "UseFTDeltaRvalues":
+            matcher.set_property('DeltaRcut', settings['dRcut'])
+        matched_jets = matcher.match()
 
-            # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
-            for g in ['g1', 'g2']:
-                TempMask = True
-                if not allow_quark_rematches:
-                    for key in Assigments[g]:
-                        if key == 'mask' or 'f' in key:
-                            continue
-                        if Assigments[g][key] == -1:
-                            TempMask = False
-                else:  # check only first 3 (5) quarks for the 2x3 (2x5) model
-                    quark_labels_to_check = ['q1', 'q2', 'q3']
-                    if signal_model == '2x5':
-                        quark_labels_to_check += ['q4', 'q5']
-                    for key in quark_labels_to_check:
-                        if Assigments[g][key] == -1:
-                            TempMask = False
-                Assigments[g]['mask'] = TempMask
+        # Fill Assigments (info for matched jets)
+        for jet_index, jet in enumerate(matched_jets):
+            if jet.is_matched():
+                Assigments = make_assigments(quark_labels, Assigments, gBarcodes, jet.get_match_gluino_barcode(), jet.get_match_pdgid(), qPDGIDs, matched_jets, jet_index, jet.is_matched_to_neutralino(), allow_quark_rematches, signal_model, log)
 
-            # Count number of at least partially reconstructed events
-            if Assigments['g1']['mask'] or Assigments['g2']['mask']:
-                partial_events += 1
-                log.debug('Event is at least partially reconstructed!')
+        # Check if fully matched
+        n_matched_jets = sum([1 if jet.is_matched() else 0 for jet in matched_jets])
+        log.debug(f'number of matched jets = {n_matched_jets}')
+        if n_matched_jets == len(quark_labels) * 2:
+            matchedEventNumbers.append(tree.eventNumber)
+            matchedEvents += 1
 
-            # Check if neutralinos were matched
-            if signal_model == '2x5':
-                neutralino_barcodes = list(set([quark.get_neutralino_barcode() for quark in Quarks if quark.get_neutralino_barcode() != -999]))
-                matched_neutralinos = {barcode: 0 for barcode in neutralino_barcodes}
-                for jet in matched_jets:
-                    match_neutralino_barcode = jet.get_match_neutralino_barcode()
-                    if match_neutralino_barcode in matched_neutralinos:
-                        matched_neutralinos[match_neutralino_barcode] += 1
-                fully_matched_neutralinos = sum([1 if n == 3 else 0 for barcode, n in matched_neutralinos.items()])
-                if fully_matched_neutralinos == 1:
-                    neutralinos_partially_matched += 1
-                elif fully_matched_neutralinos == 2:
-                    neutralinos_partially_matched += 1
-                    neutralinos_fully_matched += 1
+        # See if gluinos were fully reconstructed (i.e. each decay particle matches a jet)
+        for g in ['g1', 'g2']:
+            TempMask = True
+            if not allow_quark_rematches:
+                for key in Assigments[g]:
+                    if key == 'mask' or 'f' in key:
+                        continue
+                    if Assigments[g][key] == -1:
+                        TempMask = False
+            else:  # check only first 3 (5) quarks for the 2x3 (2x5) model
+                quark_labels_to_check = ['q1', 'q2', 'q3']
+                if signal_model == '2x5':
+                    quark_labels_to_check += ['q4', 'q5']
+                for key in quark_labels_to_check:
+                    if Assigments[g][key] == -1:
+                        TempMask = False
+            Assigments[g]['mask'] = TempMask
 
-            # Compare reconstructed gluino mass with true gluino mass
-            MultipleJetsMatchingAQuark = False
-            AllMatchedJetsIndexes = []
-            for ig in ['g1', 'g2']:  # loop over gluinos
-                # fully reconstructable gluino (every quark matches a jet)
-                if Assigments[ig]['mask']:
-                    Jets2sum = []
-                    JetIndexes = []
-                    for key in quark_labels:
-                        jIndex = Assigments[ig][key]
-                        if jIndex not in JetIndexes:
-                            JetIndexes.append(jIndex)
-                            Jets2sum.append(SelectedJets[jIndex])
-                        if jIndex not in AllMatchedJetsIndexes:
-                            AllMatchedJetsIndexes.append(jIndex)
-                        else:
-                            MultipleJetsMatchingAQuark = True
-                    # Sum assigned jets
-                    if len(Jets2sum) == 3:
-                        JetsSum = Jets2sum[0] + Jets2sum[1] + Jets2sum[2]
-                    elif len(Jets2sum) == 2:
-                        JetsSum = Jets2sum[0] + Jets2sum[1]
+        # Count number of at least partially reconstructed events
+        if Assigments['g1']['mask'] or Assigments['g2']['mask']:
+            partial_events += 1
+            log.debug('Event is at least partially reconstructed!')
+
+        # Check if neutralinos were matched
+        if signal_model == '2x5':
+            neutralino_barcodes = list(set([quark.get_neutralino_barcode() for quark in Quarks if quark.get_neutralino_barcode() != -999]))
+            matched_neutralinos = {barcode: 0 for barcode in neutralino_barcodes}
+            for jet in matched_jets:
+                match_neutralino_barcode = jet.get_match_neutralino_barcode()
+                if match_neutralino_barcode in matched_neutralinos:
+                    matched_neutralinos[match_neutralino_barcode] += 1
+            fully_matched_neutralinos = sum([1 if n == 3 else 0 for barcode, n in matched_neutralinos.items()])
+            if fully_matched_neutralinos == 1:
+                neutralinos_partially_matched += 1
+            elif fully_matched_neutralinos == 2:
+                neutralinos_partially_matched += 1
+                neutralinos_fully_matched += 1
+
+        # Compare reconstructed gluino mass with true gluino mass
+        MultipleJetsMatchingAQuark = False
+        AllMatchedJetsIndexes = []
+        for ig in ['g1', 'g2']:  # loop over gluinos
+            # fully reconstructable gluino (every quark matches a jet)
+            if Assigments[ig]['mask']:
+                Jets2sum = []
+                JetIndexes = []
+                for key in quark_labels:
+                    jIndex = Assigments[ig][key]
+                    if jIndex not in JetIndexes:
+                        JetIndexes.append(jIndex)
+                        Jets2sum.append(SelectedJets[jIndex])
+                    if jIndex not in AllMatchedJetsIndexes:
+                        AllMatchedJetsIndexes.append(jIndex)
                     else:
-                        JetsSum = Jets2sum[0]
-                    gReco = JetsSum.M()
-                    gTruth = gmass
-                    if gTruth not in hRecoMasses:
-                        print('MC channel number: {}'.format(
-                            tree.mcChannelNumber))
-                        print('Event number: {}'.format(tree.eventNumber))
-                    hRecoMasses[gTruth].Fill(gReco)
-                    hGluinoMassDiff.Fill(gReco-gTruth)
+                        MultipleJetsMatchingAQuark = True
+                # Sum assigned jets
+                if len(Jets2sum) == 3:
+                    JetsSum = Jets2sum[0] + Jets2sum[1] + Jets2sum[2]
+                elif len(Jets2sum) == 2:
+                    JetsSum = Jets2sum[0] + Jets2sum[1]
+                else:
+                    JetsSum = Jets2sum[0]
+                gReco = JetsSum.M()
+                gTruth = gmass
+                if gTruth not in hRecoMasses:
+                    print('MC channel number: {}'.format(tree.mcChannelNumber))
+                    print('Event number: {}'.format(tree.eventNumber))
+                hRecoMasses[gTruth].Fill(gReco)
+                hGluinoMassDiff.Fill(gReco-gTruth)
 
-            if MultipleJetsMatchingAQuark:
-                multipleQuarkMatchingEvents += 1
+        if MultipleJetsMatchingAQuark:
+            multipleQuarkMatchingEvents += 1
 
-        # Add data to assigments_list
-        for key in Structure:
-            for case in Structure[key]:
-                assigments_list[key][case].append(Assigments[key][case])
+    # Add data to assigments_list
+    for key in Structure:
+        for case in Structure[key]:
+            assigments_list[key][case].append(Assigments[key][case])
 
     # Close input file
     del tree
@@ -796,35 +759,33 @@ def process_files(settings):
             for case in Structure[key]:
                 Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=assigments_list[key][case])
 
-    if settings['do_matching']:
+    # Save histogram
+    outFile = ROOT.TFile(os.path.join(settings["outDir"], "GluinoMassDiff.root"), 'RECREATE')
+    hGluinoMassDiff.Write()
+    outFile.Close()
+    
+    # Reco gluino mass distributions
+    outFile = ROOT.TFile(os.path.join(settings["outDir"], "ReconstructedGluinoMasses.root"), 'RECREATE')
+    for key, hist in hRecoMasses.items():
+        hist.Write()
+    outFile.Close()
 
-        # Save histogram
-        outFile = ROOT.TFile(os.path.join(settings["outDir"], "GluinoMassDiff.root"), 'RECREATE')
-        hGluinoMassDiff.Write()
-        outFile.Close()
+    # print matching efficiency
+    log.info(f'matching efficiency (percentage of events where {len(quark_labels) * 2} quarks are matched): {matchedEvents/event_counter}')
+    log.info(f'partial matching efficiency (percentage of events where at least one gluino is matched): {partial_events/event_counter}')
+    if signal_model == '2x5':
+        log.info(f'matching efficiency for reconstructing both neutralinos: {neutralinos_fully_matched/event_counter}')
+        log.info(f'matching efficiency for reconstructing at least one neutralino: {neutralinos_partially_matched/event_counter}')
+    log.info(f'Number of events where {len(quark_labels) * 2} quarks are matched: {matchedEvents}')
+    log.info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
+    for flav in quark_flavours:
+        if NquarksByFlavour[flav] != 0:
+            log.info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
 
-        # Reco gluino mass distributions
-        outFile = ROOT.TFile(os.path.join(settings["outDir"], "ReconstructedGluinoMasses.root"), 'RECREATE')
-        for key, hist in hRecoMasses.items():
-            hist.Write()
-        outFile.Close()
-
-        # print matching efficiency
-        log.info(f'matching efficiency (percentage of events where {len(quark_labels) * 2} quarks are matched): {matchedEvents/event_counter}')
-        log.info(f'partial matching efficiency (percentage of events where at least one gluino is matched): {partial_events/event_counter}')
-        if signal_model == '2x5':
-            log.info(f'matching efficiency for reconstructing both neutralinos: {neutralinos_fully_matched/event_counter}')
-            log.info(f'matching efficiency for reconstructing at least one neutralino: {neutralinos_partially_matched/event_counter}')
-        log.info(f'Number of events where {len(quark_labels) * 2} quarks are matched: {matchedEvents}')
-        log.info(f'percentage of events having a quark matching several jets: {multipleQuarkMatchingEvents/event_counter}')
-        for flav in quark_flavours:
-            if NquarksByFlavour[flav] != 0:
-                log.info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
-
-        # saving matching settings
-        with open(os.path.join(settings["outDir"], "matchedEvents.root"),"w") as outFile:
-            for event in matchedEventNumbers:
-                outFile.write(str(event)+'\n')
+    # saving matching settings
+    with open(os.path.join(settings["outDir"], "matchedEvents.root"),"w") as outFile:
+        for event in matchedEventNumbers:
+            outFile.write(str(event)+'\n')
 
     log.info('>>> ALL DONE <<<')
 
