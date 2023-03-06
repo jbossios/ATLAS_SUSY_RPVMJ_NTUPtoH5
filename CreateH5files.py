@@ -514,8 +514,7 @@ def process_files(settings):
             Assigments['source'][case] = np.array(array)
 
         # Save event-level variables
-        Assigments['EventVars']['rowNo'] = counter # row number of event
-<<<<<<< HEAD
+        #Assigments['EventVars']['rowNo'] = counter # row number of event
         Assigments['EventVars']['jet_Cparam'] = 3*(tree.jet_SphericityTensor_eigen31[0]*tree.jet_SphericityTensor_eigen32[0] + tree.jet_SphericityTensor_eigen31[0]*tree.jet_SphericityTensor_eigen33[0] + tree.jet_SphericityTensor_eigen32[0]*tree.jet_SphericityTensor_eigen33[0])
         Assigments['EventVars']['gmass'] = gmass
         #Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
