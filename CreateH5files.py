@@ -37,6 +37,7 @@ def main():
     parser.add_argument('-o', '--outDir', default='./', help="Output directory for files")
     parser.add_argument('-v', '--version', default="0", help="Production version")
     parser.add_argument('-j', '--ncpu', default=1, type=int, help="Number of cores to use in multiprocessing pool")
+    parser.add_argument('-n', '--normalization_denominator', default=None, help='json library for norm weights.')
     parser.add_argument('--minJetPt', default=50, type=int, help="Minimum selected jet pt")
     parser.add_argument('--maxNjets', default=8, type=int, help="Maximum number of leading jets retained in h5 files")
     parser.add_argument('--minNjets', default=6, type=int, help="Minimum number of leading jets retained in h5 files")
@@ -47,10 +48,7 @@ def main():
     parser.add_argument('--matchingCriteria', default='RecomputeDeltaRvalues_drPriority', help='Choose matching criteria from: UseFTDeltaRvalues, RecomputeDeltaRvalues_ptPriority, RecomputeDeltaRvalues_drPriority')
     parser.add_argument('--doNotUseFSRs', action='store_true', help="Do not consider final state radiation (FSR) in jet-parton matching")
     parser.add_argument('--debug', action='store_true', help="Enable debug print statemetents")
-    parser.add_argument('--combine', action='store_true', help="Only combine the list of h5 files. File name automatically handled")
-    parser.add_argument('--combineExcludedDSIDs',  nargs="+", help="List of DSIDs to exclude when combining h5 files", default=[])
     parser.add_argument('--doOverwrite', action="store_true", help="Overwrite already existing files")
-    parser.add_argument('--useOldMCEvtWeightBranch', action="store_true", default=False, help="Use mcEventWeight instead of mcEventWeightsVector")
     parser.add_argument('--doEventDisplays', action="store_true", default=False, help="Create event displays (only done if matching is performed)")
     parser.add_argument('--doSystematics', action="store_true", default=False, help="Process systematic TTrees (off by default)")
     args = parser.parse_args()
@@ -70,14 +68,12 @@ def main():
     if not os.path.isdir(args.outDir):
         os.makedirs(args.outDir)
 
-    # if just combine
-    if args.combine:
-        # remove unwanted dsids
-        input_files = [i for i in input_files if not any([j for j in args.combineExcludedDSIDs if j in i])]
-        return combine_h5(input_files, args.outDir, args.version)
-
     # get sum of weights
-    sum_of_weights = get_sum_of_weights(input_files)
+    if args.normalization_denominator:
+        with open(args.normalization_denominator) as f:
+            sum_of_weights = json.load(f)
+    else:
+        sum_of_weights = get_sum_of_weights(input_files)
     log.info('Sum of weights: {}'.format(sum_of_weights))
 
     # get list of ttrees using the first input file
@@ -98,43 +94,25 @@ def main():
         print(f"Including tree {treeName}")
         for inFileName in input_files:
             
-            # understand file type
-            sample = "Signal"
-            if "dijet" in inFileName or "WithSW" in inFileName:
-                sample = "Dijet"
-            elif "data" in inFileName:
-                sample = "Data"
-            do_matching = sample == 'Signal'
-            dsid = int(inFileName.split('user.')[1].split('.')[2])
-
-            # create outfile tag
-            tag = f"{treeName.strip('trees_')}_minJetPt{args.minJetPt}_minNjets{args.minNjets}_maxNjets{args.maxNjets}"
-            if do_matching:
-                criteriaTag = {'UseFTDeltaRvalues':'FTDR', 'RecomputeDeltaRvalues_ptPriority': 'RDR_pt', 'RecomputeDeltaRvalues_drPriority' : 'RDR_dr'}
-                tag += f"_{criteriaTag[args.matchingCriteria]}"
-            tag += f"_v{args.version}"
+            dsid = str(inFileName.split('user.')[1].split('.')[2])
 
             confs.append({
                 # input settings
                 'inFileName': inFileName,
                 'sum_of_weights': sum_of_weights[dsid],
-                'sample' : sample,
                 'treeName' : treeName,
                 'doOverwrite' : args.doOverwrite,
                 'signalModel': args.signalModel,
                 'nQuarks': args.nQuarks,
                 'allowQuarkReMatches': args.allowQuarkReMatches,
-                'useOldMCEvtWeightBranch': args.useOldMCEvtWeightBranch,
                 # output settings
                 'outDir': args.outDir,
-                'tag': tag,
                 # jet settings
                 'minJetPt': args.minJetPt,
                 'maxNjets': args.maxNjets,
                 'MinNjets': args.minNjets,
-                'shuffleJets': args.shuffleJets,
                 # matching settings
-                'do_matching' : do_matching,
+                'do_matching' : True,
                 'MatchingCriteria': args.matchingCriteria,
                 'useFSRs': not args.doNotUseFSRs,
                 'dRcut': 0.4,
@@ -181,7 +159,7 @@ def get_sum_of_weights(file_list):
         except OSError:
             raise OSError('{} can not be opened'.format(file_name))
         # Identify DSID for this file
-        dsid = int(file_name.split('user.')[1].split('.')[2])
+        dsid = str(file_name.split('user.')[1].split('.')[2])
         # Get sum of weights from metadata
         metadata_hist = tfile.Get('MetaData_EventCount')
         if dsid not in sum_of_weights:
@@ -395,8 +373,8 @@ def process_files(settings):
 
     # Set structure of output H5 file
     Structure = {
-        'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'QGTaggerBDT'],
-        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass', 'rowNo', 'normweight'],
+        'source': ['eta', 'mask', 'mass', 'phi', 'pt', 'e'],
+        'EventVars': ['HT', 'deta', 'djmass', 'minAvgMass', 'rowNo', 'normweight', 'jet_SphericityTensor_eigen21', 'jet_SphericityTensor_eigen22','jet_SphericityTensor_eigen31', 'jet_SphericityTensor_eigen32', 'jet_SphericityTensor_eigen33'],
     }
 
     if settings['do_matching']:
@@ -452,7 +430,7 @@ def process_files(settings):
     ##############################################################################################
     
     # check if output file already exists
-    outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", f"_{settings['tag']}.h5"))
+    outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", ".h5"))
     if os.path.isfile(outFileName) and not settings['doOverwrite']:
         log.info(f"Output file already exists so skipping: {outFileName}")
         return 
@@ -506,16 +484,11 @@ def process_files(settings):
             log.fatal(f'More than {settings["maxNjets"]} jets were found ({nJets}), fix me!')
             sys.exit(1)
 
-        # Remove pt ordering in the jet array (if requested)
-        if settings['shuffleJets']:
-            random.shuffle(SelectedJets)
-
         # Extract gluino mass
-        if settings['sample'] == 'Signal':
-            for ipart in range(len(tree.truth_parent_m)):  # loop over truth particles
-                if tree.truth_parent_pdgId[ipart] == 1000021:  # it's a gluino
-                    gmass = tree.truth_parent_m[ipart]
-                    break
+        for ipart in range(len(tree.truth_parent_m)):  # loop over truth particles
+            if tree.truth_parent_pdgId[ipart] == 1000021:  # it's a gluino
+                gmass = tree.truth_parent_m[ipart]
+                break
 
         # Put place-holder values for each variable
         # set jet index for each particle q1,q2,q3 (q4,q5 for 2x5) to -1 (i.e. no matching) and mask to True
@@ -540,6 +513,8 @@ def process_files(settings):
                     array.append(j.Eta())
                 elif case == 'mass':
                     array.append(j.M())
+                elif case == 'e':
+                    array.append(j.E())
                 elif case == 'phi':
                     array.append(j.Phi())
                 elif case == 'pt':
@@ -563,13 +538,14 @@ def process_files(settings):
         Assigments['EventVars']['HT'] = ht
         Assigments['EventVars']['deta'] = SelectedJets[0].Eta() - SelectedJets[1].Eta()
         Assigments['EventVars']['djmass'] = (SelectedJets[0]+SelectedJets[1]).M()
-        if settings['sample'] == 'Signal':
-            Assigments['EventVars']['gmass'] = gmass
-        Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
-        if settings['useOldMCEvtWeightBranch']:
-            Assigments['EventVars']['normweight'] = tree.mcEventWeight * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
-        else:
-            Assigments['EventVars']['normweight'] = tree.mcEventWeightsVector[0] * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
+        Assigments['EventVars']['jet_SphericityTensor_eigen21'] = tree.jet_SphericityTensor_eigen21[0]
+        Assigments['EventVars']['jet_SphericityTensor_eigen22'] = tree.jet_SphericityTensor_eigen22[0]
+        Assigments['EventVars']['jet_SphericityTensor_eigen31'] = tree.jet_SphericityTensor_eigen31[0]
+        Assigments['EventVars']['jet_SphericityTensor_eigen32'] = tree.jet_SphericityTensor_eigen32[0]
+        Assigments['EventVars']['jet_SphericityTensor_eigen33'] = tree.jet_SphericityTensor_eigen33[0]
+        Assigments['EventVars']['gmass'] = gmass
+        #Assigments['EventVars']['minAvgMass'] = tree.minAvgMass_jetdiff10_btagdiff10
+        Assigments['EventVars']['normweight'] = tree.mcEventWeightsVector[0] * tree.pileupWeight * tree.weight_filtEff * tree.weight_kFactor * tree.weight_xs / settings['sum_of_weights']
 
         if settings['do_matching']:
 
@@ -590,7 +566,7 @@ def process_files(settings):
                 quark_e = tree.truth_QuarkFromGluino_e[iquark]
                 quark_parent_barcode = tree.truth_QuarkFromGluino_ParentBarcode[iquark]
                 quark_barcode = tree.truth_QuarkFromGluino_barcode[iquark]
-                quark_pdgid = tree.truth_QuarkFromGluino_pdgID[iquark]
+                quark_pdgid = tree.truth_QuarkFromGluino_pdgId[iquark]
                 Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
                 Quarks[iquark].set_gluino_barcode(quark_parent_barcode)
                 Quarks[iquark].set_barcode(quark_barcode)
@@ -649,7 +625,7 @@ def process_files(settings):
                     log.fatal(f'Corresponding neutralino not found for quark {iquark} not found, exiting')
                     sys.exit(1)
                 quark_barcode = tree.truth_QuarkFromNeutralino_barcode[index]
-                quark_pdgid = tree.truth_QuarkFromNeutralino_pdgID[index]
+                quark_pdgid = tree.truth_QuarkFromNeutralino_pdgId[index]
                 Quarks += [RPVParton()]
                 Quarks[iquark].SetPtEtaPhiE(quark_pt, quark_eta, quark_phi, quark_e)
                 Quarks[iquark].set_gluino_barcode(quark_gluino_barcode)
@@ -812,7 +788,6 @@ def process_files(settings):
     del tree
 
     # Create H5 file
-    outFileName = os.path.join(settings["outDir"], os.path.basename(settings["inFileName"]).replace(".root", f"_{settings['tag']}.h5"))
     log.info('Creating {}'.format(outFileName))
     with h5py.File(outFileName, 'w') as HF:
         Groups, Datasets = dict(), dict()
@@ -824,12 +799,12 @@ def process_files(settings):
     if settings['do_matching']:
 
         # Save histogram
-        outFile = ROOT.TFile(os.path.join(settings["outDir"], f"GluinoMassDiff_{settings['tag']}.root"), 'RECREATE')
+        outFile = ROOT.TFile(os.path.join(settings["outDir"], "GluinoMassDiff.root"), 'RECREATE')
         hGluinoMassDiff.Write()
         outFile.Close()
 
         # Reco gluino mass distributions
-        outFile = ROOT.TFile(os.path.join(settings["outDir"], f"ReconstructedGluinoMasses_{settings['tag']}.root"), 'RECREATE')
+        outFile = ROOT.TFile(os.path.join(settings["outDir"], "ReconstructedGluinoMasses.root"), 'RECREATE')
         for key, hist in hRecoMasses.items():
             hist.Write()
         outFile.Close()
@@ -847,74 +822,11 @@ def process_files(settings):
                 log.info(f'Matching efficiency for quarks w/ abs(pdgID)=={flav}: {NmatchedQuarksByFlavour[flav]/NquarksByFlavour[flav]}')
 
         # saving matching settings
-        with open(os.path.join(settings["outDir"], f"matchedEvents_{settings['tag']}.root"),"w") as outFile:
+        with open(os.path.join(settings["outDir"], "matchedEvents.root"),"w") as outFile:
             for event in matchedEventNumbers:
                 outFile.write(str(event)+'\n')
 
     log.info('>>> ALL DONE <<<')
-
-
-def combine_h5(inFileList, outDir, version):
-
-    # inherit structure from first file
-    with h5py.File(inFileList[0],"r") as f:
-        Structure = {key:list(f[key].keys()) for key in f.keys()}
-
-    # make and populate assignments_list
-    assigments_list = {key: {case: [] for case in cases} for key, cases in Structure.items()}
-    tags = []
-    for iF, inFile in enumerate(inFileList):
-        log.info(f"File {iF}/{len(inFileList)}")
-        tags.append(inFile.split("trees_")[-1].strip(".h5"))
-        with h5py.File(inFile,"r") as f:
-            for key in Structure:
-                for case in Structure[key]:
-                    if len(f[key][case]):
-                        assigments_list[key][case].append(np.array(f[key][case]))
-                    else:
-                        print(f"{inFile} has zero entries in {case}")
-    
-    # create outfilename
-    outFileName = ""
-    if any([i for i in list(range(504513,504552+1)) if str(i) in inFileList[0]]):
-        outFileName = "gg_rpv"
-    elif any([i for i in list(range(512804,512947+1)) if str(i) in inFileList[0]]):
-        outFileName = "gg_rpv_viaN1"
-    elif any([i for i in list(range(364700,364712+1)) if str(i) in inFileList[0]]):
-        outFileName = "jetjet_JZWithSW"
-    elif "data" in inFileList[0]:
-        outFileName = "data"
-    # check the tag and update output name
-    tags = list(set(tags))
-    if len(tags) > 1:
-        log.error(f"You are combining files with more than one tag: {tags}")
-        return
-    else:
-        outFileName += f"_{tags[0]}"
-    # add combine tag
-    outFileName += f"_c{version}"
-    # add h5 tag
-    outFileName += ".h5"
-    # add output directory
-    outFileName = os.path.join(outDir, outFileName)
-    
-    # create combined file
-    log.info(f"Combining into {outFileName}")
-    with h5py.File(outFileName,"w") as HF:
-        Groups, Datasets = dict(), dict()
-        for key in Structure:
-            Groups[key] = HF.create_group(key)
-            for case in Structure[key]:
-                print(f"    Adding dataset: {key}/{case}")
-                Datasets[key+'_'+case] = Groups[key].create_dataset(case, data=np.concatenate(assigments_list[key][case]))
-
-    # save list of files to txt file
-    txtFileName = outFileName.replace(".h5",".txt")
-    log.info(f"Documenting used log files in {txtFileName}")
-    with open(txtFileName,"w") as f:
-        f.write('\n'.join(inFileList))
-
-    log.info("Done!")
 
 if __name__ == '__main__':
     main()
